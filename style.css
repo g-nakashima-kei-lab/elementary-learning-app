@@ -901,12 +901,451 @@ body {
 .grid-cell.answer-cell.is-review-correct {
   border-color: #86efac;
   background-color: #f0fdf4;
+  color: #16a34a;
 }
 
 .grid-cell.answer-cell.is-review-incorrect {
   border-color: #fca5a5;
   background-color: #fef2f2;
-  color: #ef4444;
   position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  line-height: 1.1;
+  gap: 1px;
 }
+
+.cell-review-wrong {
+  font-size: 0.95rem;
+  color: #ef4444;
+  text-decoration: line-through;
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+.cell-review-correct-badge {
+  font-size: 1.35rem;
+  font-weight: 900;
+  color: #16a34a;
+}
+
+.cell-review-right {
+  font-size: 1.6rem;
+  font-weight: 900;
+  color: #16a34a;
+}
+
+/* 式表示の見直しピル */
+.review-status-pill {
+  font-size: 0.9rem;
+  font-weight: 800;
+  padding: 3px 12px;
+  border-radius: 999px;
+  margin-left: 10px;
+  display: inline-flex;
+  align-items: center;
+  vertical-align: middle;
+}
+
+.review-status-pill.pill-correct {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.review-status-pill.pill-wrong {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.review-status-pill del {
+  color: #ef4444;
+  font-weight: 900;
+  margin: 0 3px;
+}
+
+.text-success-bold {
+  color: #16a34a;
+  font-weight: 900;
+}
+
+/* 認識バッジの対比表示 */
+.recog-badge .badge-wrong {
+  color: #fca5a5;
+  text-decoration: line-through;
+  font-size: 1.1rem;
+}
+
+.recog-badge .badge-arrow {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.85rem;
+  margin: 0 4px;
+}
+
+.recog-badge .badge-correct {
+  color: #ffffff;
+  font-weight: 900;
+}
+
+.btn-show-results {
+  background: var(--primary) !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 4px rgba(37, 99, 235, 0.3) !important;
+}
+
+/* ==========================================================================
+   学習記録（タイム表示 ＆ 過去記録比較 ＆ 履歴モーダル）スタイル
+   ========================================================================== */
+.result-time-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  padding: 3px 14px;
+  border-radius: 999px;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: var(--primary);
+  margin-top: 6px;
+}
+
+.r-time-val {
+  font-size: 1.15rem;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 過去記録との比較カード */
+.result-comparison-box {
+  width: 100%;
+}
+
+.comp-card {
+  background: #f8fafc;
+  border: 2px solid #e2e8f0;
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  text-align: left;
+}
+
+/* 温かい励ましメッセージセクション */
+.comp-cheer-section {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: #ffffff;
+  border: 1px solid #e0e7ff;
+  border-left: 5px solid var(--primary);
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.comp-cheer-first {
+  border-left-color: #16a34a;
+  background: #f0fdf4;
+  border-color: #bbf7d0;
+}
+
+.comp-cheer-icon {
+  font-size: 1.8rem;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.comp-cheer-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.comp-cheer-title {
+  font-size: 0.98rem;
+  font-weight: 900;
+  color: var(--text-main);
+}
+
+.comp-cheer-text {
+  font-size: 0.88rem;
+  color: #334155;
+  line-height: 1.45;
+  font-weight: 600;
+}
+
+.comp-details-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: #f1f5f9;
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  border: 1px dashed #cbd5e1;
+}
+
+.comp-header {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: var(--text-muted);
+}
+
+.comp-badge-best {
+  background: linear-gradient(135deg, #fef08a, #fed7aa);
+  border: 1px solid #f59e0b;
+  color: #9a3412;
+  font-size: 0.95rem;
+  font-weight: 800;
+  padding: 5px 12px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 2px 4px rgba(245, 158, 11, 0.15);
+}
+
+.comp-stats-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.comp-stat-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.comp-stat-icon {
+  font-size: 1rem;
+}
+
+.comp-best-ref {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  border-top: 1px dashed #cbd5e1;
+  padding-top: 6px;
+  margin-top: 2px;
+}
+
+.comp-best-ref strong {
+  color: var(--text-main);
+}
+
+.btn-history-action {
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 2px solid #bae6fd;
+}
+
+.btn-history-action:active {
+  background: #bae6fd;
+}
+
+.btn-history-header {
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+/* 履歴モーダル */
+.modal-card-wide {
+  max-width: 540px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.history-body {
+  overflow-y: auto;
+  max-height: 60vh;
+  padding-right: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* 自己ベストカード */
+.best-record-card {
+  background: #fefce8;
+  border: 2px solid #fef08a;
+  border-radius: var(--radius-md);
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.best-record-header {
+  font-size: 1.05rem;
+  font-weight: 900;
+  color: #854d0e;
+}
+
+.best-record-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.best-stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.best-stat-lbl {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.best-stat-val {
+  font-size: 1.6rem;
+  font-weight: 900;
+  line-height: 1.1;
+}
+
+.best-stat-sub {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+/* 履歴一覧 */
+.history-list-container {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #e2e8f0;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: #ffffff;
+}
+
+.history-list-header {
+  display: grid;
+  grid-template-columns: 2fr 1.2fr 1.2fr;
+  padding: 8px 12px;
+  background: #f1f5f9;
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.history-list-items {
+  display: flex;
+  flex-direction: column;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.history-row {
+  display: grid;
+  grid-template-columns: 2fr 1.2fr 1.2fr;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 0.9rem;
+  transition: background-color 0.1s;
+}
+
+.history-row:last-child {
+  border-bottom: none;
+}
+
+.history-row:hover {
+  background-color: #f8fafc;
+}
+
+.history-row.is-best-row {
+  background-color: #fffbeb;
+}
+
+.history-col-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.h-date {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.h-mode {
+  font-weight: 800;
+  font-size: 0.9rem;
+  color: var(--text-main);
+}
+
+.h-badge-best {
+  display: inline-block;
+  background: #fef08a;
+  color: #854d0e;
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 999px;
+  width: fit-content;
+  margin-top: 2px;
+}
+
+.history-col-score {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.h-acc {
+  font-size: 1.1rem;
+  font-weight: 900;
+}
+
+.h-count {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.history-col-time {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.95rem;
+  color: var(--text-main);
+}
+
+.history-empty {
+  padding: 30px 16px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.modal-footer-row {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.modal-footer-row .btn-modal {
+  flex: 1;
+}
+
+.btn-clear-history {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  font-size: 0.95rem;
+}
+
+.btn-clear-history:active {
+  background: #fecaca;
+}
+
 

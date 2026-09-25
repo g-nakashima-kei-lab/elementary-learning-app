@@ -24,6 +24,7 @@
         </div>
       </div>
       <div class="header-right">
+        <button id="btn-header-history" class="btn-icon btn-history-header" title="これまでのきろく">📜 きろく</button>
         <button id="btn-hand-toggle" class="btn-hand" title="きき手を切り替える">🖐️ みぎきき</button>
         <button id="btn-sound-toggle" class="btn-icon" title="おとの切り替え">🔔</button>
         <button id="btn-quit" class="btn-sub">おわる</button>
@@ -131,49 +132,105 @@
 
     <!-- 終了時 結果表示モーダル (Phase 3) -->
     <div id="result-modal" class="modal-backdrop" aria-hidden="true">
-      <div class="modal-card" role="dialog" aria-labelledby="modal-title">
+      <div class="modal-card modal-card-result" role="dialog" aria-labelledby="modal-title">
+        <!-- 右上の✕閉じるボタン -->
+        <button id="btn-close-result" class="modal-close-btn" aria-label="結果画面をとじる" title="とじる">✕</button>
+
         <div class="modal-header">
           <span class="modal-icon">🎉</span>
           <h2 id="modal-title" class="modal-title">おつかれさま！</h2>
         </div>
-        <div class="modal-body">
-          <div class="result-score-box">
-            <span class="score-label">せいかい</span>
-            <div class="score-numbers">
-              <span id="result-correct-count" class="score-main">0</span>
-              <span class="score-slash">/</span>
-              <span id="result-total-count" class="score-sub">25</span>
-              <span class="score-unit">もん</span>
+        <div class="modal-body modal-body-result">
+          <!-- 上段: 成績サマリーと内訳を横並び2カラム化 -->
+          <div class="result-top-row">
+            <div class="result-score-box">
+              <span class="score-label">せいかい</span>
+              <div class="score-numbers">
+                <span id="result-correct-count" class="score-main">0</span>
+                <span class="score-slash">/</span>
+                <span id="result-total-count" class="score-sub">25</span>
+                <span class="score-unit">もん</span>
+              </div>
+              <div class="result-badges-row">
+                <span class="accuracy-tag" id="result-accuracy-tag">せいとうりつ 0%</span>
+                <span class="result-time-tag">
+                  <span class="r-time-icon">⏱️</span>
+                  <strong id="result-time-display" class="r-time-val">00:00</strong>
+                </span>
+              </div>
             </div>
-            <div class="accuracy-tag" id="result-accuracy-tag">せいとうりつ 0%</div>
+
+            <!-- 内訳 -->
+            <div class="result-breakdown">
+              <div class="breakdown-item">
+                <span class="bd-icon">🎯</span>
+                <span class="bd-label">せいかい:</span>
+                <strong id="bd-correct" class="bd-val text-success">0</strong>
+              </div>
+              <div class="breakdown-item">
+                <span class="bd-icon">✏️</span>
+                <span class="bd-label">まちがい:</span>
+                <strong id="bd-incorrect" class="bd-val text-danger">0</strong>
+              </div>
+              <div class="breakdown-item">
+                <span class="bd-icon">⬜</span>
+                <span class="bd-label">のこり:</span>
+                <strong id="bd-unanswered" class="bd-val text-muted">0</strong>
+              </div>
+              <div class="breakdown-item highlight-item">
+                <span class="bd-icon">💡</span>
+                <span class="bd-label">直した:</span>
+                <strong id="bd-corrections" class="bd-val text-primary">0 かい</strong>
+              </div>
+            </div>
           </div>
 
-          <div class="result-breakdown">
-            <div class="breakdown-item">
-              <span class="bd-icon">🎯</span>
-              <span class="bd-label">せいかい:</span>
-              <strong id="bd-correct" class="bd-val text-success">0</strong>
+          <!-- 過去記録との比較エリア（動的生成） -->
+          <div class="result-comparison-box" id="result-comparison-box">
+            <!-- JSで動的に励ましメッセージや前回の記録との比較を描画 -->
+          </div>
+        </div>
+        <div class="modal-footer result-footer-grid">
+          <div class="footer-sub-actions">
+            <button id="btn-review-answers" class="btn-modal btn-review">🔍 間ちがえた問題を見る</button>
+            <button id="btn-modal-history" class="btn-modal btn-history-action">📜 これまでのきろく</button>
+          </div>
+          <button id="btn-restart" class="btn-modal btn-restart btn-primary-action">もういちど 挑戦する！ 🔄</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 学習記録 履歴モーダル -->
+    <div id="history-modal" class="modal-backdrop" aria-hidden="true">
+      <div class="modal-card modal-card-wide" role="dialog" aria-labelledby="history-title">
+        <div class="modal-header">
+          <span class="modal-icon">📜</span>
+          <h2 id="history-title" class="modal-title">これまでの学習きろく</h2>
+        </div>
+        <div class="modal-body history-body">
+          <!-- 自己ベストハイライトカード -->
+          <div class="best-record-card" id="best-record-card">
+            <div class="best-record-header">🏆 じこベスト</div>
+            <div class="best-record-stats" id="best-record-stats">
+              <!-- JSで動的生成 -->
             </div>
-            <div class="breakdown-item">
-              <span class="bd-icon">✏️</span>
-              <span class="bd-label">まちがい:</span>
-              <strong id="bd-incorrect" class="bd-val text-danger">0</strong>
+          </div>
+
+          <!-- 履歴一覧 -->
+          <div class="history-list-container">
+            <div class="history-list-header">
+              <span>📅 日時 / 内容</span>
+              <span>🎯 せいとうりつ</span>
+              <span>⏱️ タイム</span>
             </div>
-            <div class="breakdown-item">
-              <span class="bd-icon">⬜</span>
-              <span class="bd-label">のこり:</span>
-              <strong id="bd-unanswered" class="bd-val text-muted">0</strong>
-            </div>
-            <div class="breakdown-item highlight-item">
-              <span class="bd-icon">💡</span>
-              <span class="bd-label">じぶんで直した:</span>
-              <strong id="bd-corrections" class="bd-val text-primary">0 かい</strong>
+            <div class="history-list-items" id="history-list-items">
+              <!-- JSで動的生成 -->
             </div>
           </div>
         </div>
-        <div class="modal-footer">
-          <button id="btn-review-answers" class="btn-modal btn-review">まちがえた問題をみる</button>
-          <button id="btn-restart" class="btn-modal btn-restart">もういちど 挑戦する！ 🔄</button>
+        <div class="modal-footer modal-footer-row">
+          <button id="btn-clear-history" class="btn-modal btn-clear-history" title="すべてのきろくを消去">🗑️ きろくを消す</button>
+          <button id="btn-close-history" class="btn-modal btn-restart">とじる ✕</button>
         </div>
       </div>
     </div>

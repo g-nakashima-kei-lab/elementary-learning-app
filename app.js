@@ -65,6 +65,24 @@ class MathGridApp {
     this.btnHandToggle = document.getElementById('btn-hand-toggle');
     this.handPreference = localStorage.getItem('manabi_hand_preference') || 'right';
 
+    // タイマー状態
+    this.timerDisplayEl = document.getElementById('timer-display');
+    this.timerInterval = null;   // setInterval ID
+    this.timerStartTime = null;  // performance.now() の開始時刻
+    this.timerElapsedMs = 0;     // 停止時に確定した経過ミリ秒
+
+    // 学習記録（localStorage）関連
+    this.historyKey = 'manabi_learning_history';
+    this.resultTimeDisplay = document.getElementById('result-time-display');
+    this.resultComparisonBox = document.getElementById('result-comparison-box');
+    this.btnHeaderHistory = document.getElementById('btn-header-history');
+    this.btnModalHistory = document.getElementById('btn-modal-history');
+    this.historyModal = document.getElementById('history-modal');
+    this.btnCloseHistory = document.getElementById('btn-close-history');
+    this.btnClearHistory = document.getElementById('btn-clear-history');
+    this.historyListItems = document.getElementById('history-list-items');
+    this.bestRecordStats = document.getElementById('best-record-stats');
+
     this.init();
   }
 
@@ -80,6 +98,7 @@ class MathGridApp {
     this.setActiveCell(0, 0);
     this.attachEventListeners();
     this.updateProgress();
+    this.startTimer();
     console.log('MathGridApp initialized successfully.');
   }
 
@@ -225,6 +244,66 @@ class MathGridApp {
   }
 
   /**
+   * タイマーを開始する（テスト開始時に呼ぶ）
+   */
+  startTimer() {
+    if (this.timerInterval) return; // 二重起動防止
+    this.timerStartTime = performance.now() - this.timerElapsedMs;
+    this.timerInterval = setInterval(() => this.updateTimerDisplay(), 500);
+    this.updateTimerDisplay(); // 即時描画
+    console.log('[タイマー] 開始');
+  }
+
+  /**
+   * タイマーを停止する（テスト終了時に呼ぶ）
+   */
+  stopTimer() {
+    if (!this.timerInterval) return;
+    clearInterval(this.timerInterval);
+    this.timerInterval = null;
+    this.timerElapsedMs = performance.now() - this.timerStartTime;
+    this.updateTimerDisplay(); // 最終時刻を確定表示
+    console.log(`[タイマー] 停止 (${this.formatTime(this.timerElapsedMs)})`);
+  }
+
+  /**
+   * タイマーをリセットする（再挑戦時に呼ぶ）
+   */
+  resetTimer() {
+    if (this.timerInterval) {
+      clearInterval(this.timerInterval);
+      this.timerInterval = null;
+    }
+    this.timerStartTime = null;
+    this.timerElapsedMs = 0;
+    if (this.timerDisplayEl) {
+      this.timerDisplayEl.textContent = '00:00';
+    }
+    console.log('[タイマー] リセット');
+  }
+
+  /**
+   * タイマー表示を現在の経過時間で更新する
+   */
+  updateTimerDisplay() {
+    if (!this.timerDisplayEl || !this.timerStartTime) return;
+    const elapsed = performance.now() - this.timerStartTime;
+    this.timerDisplayEl.textContent = this.formatTime(elapsed);
+  }
+
+  /**
+   * ミリ秒を MM:SS 形式にフォーマット
+   * @param {number} ms
+   * @returns {string}
+   */
+  formatTime(ms) {
+    const totalSec = Math.floor(ms / 1000);
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  /**
    * 手書きCanvasの解像度調整およびPointer Events初期化
    */
   initCanvas() {
@@ -270,6 +349,7 @@ class MathGridApp {
   }
 
   handlePointerDown(e) {
+    if (this.isTestFinished) return;
     e.preventDefault();
     if (this.autoAdvanceTimer) {
       clearTimeout(this.autoAdvanceTimer);
@@ -374,6 +454,7 @@ class MathGridApp {
    * 1タップ修正の適用（誤認識時）
    */
   applyCorrection(selectedNum) {
+    if (this.isTestFinished) return;
     const { row, col } = this.activeCell;
     const detail = this.details[row][col];
 
@@ -399,6 +480,7 @@ class MathGridApp {
    * 大型テンキーからの直接入力
    */
   handleKeypadInput(key) {
+    if (this.isTestFinished) return;
     const { row, col } = this.activeCell;
     const detail = this.details[row][col];
 
@@ -466,6 +548,7 @@ class MathGridApp {
    * 現在のマスの入力をクリア
    */
   clearCurrentCell() {
+    if (this.isTestFinished) return;
     const { row, col } = this.activeCell;
     this.answers[row][col] = '';
     const detail = this.details[row][col];
@@ -562,10 +645,10 @@ class MathGridApp {
 
     if (this.isTestFinished) {
       if (detail.isCorrect) {
-        this.calcFormulaEl.textContent = `${rowNum} ＋ ${colNum} ＝ ${detail.correctAnswer} ⭕ せいかい！`;
+        this.calcFormulaEl.innerHTML = `<span>${rowNum} ＋ ${colNum} ＝ <strong>${detail.correctAnswer}</strong></span> <span class="review-status-pill pill-correct">⭕ せいかい！</span>`;
       } else {
-        const yourAns = detail.studentAnswer !== null && detail.studentAnswer !== '' ? detail.studentAnswer : '未入力';
-        this.calcFormulaEl.textContent = `${rowNum} ＋ ${colNum} ＝ ${detail.correctAnswer}（あなたの答え: ${yourAns}）`;
+        const yourAns = (detail.studentAnswer !== null && detail.studentAnswer !== '') ? detail.studentAnswer : '未入力';
+        this.calcFormulaEl.innerHTML = `<span>${rowNum} ＋ ${colNum} ＝ <strong class="text-success-bold">${detail.correctAnswer}</strong></span> <span class="review-status-pill pill-wrong">あなたの答え: <del>${yourAns}</del> ❌</span>`;
       }
     } else {
       this.calcFormulaEl.textContent = `${rowNum} ＋ ${colNum} ＝ ？`;
@@ -580,8 +663,19 @@ class MathGridApp {
     }
 
     const currentVal = detail.studentAnswer !== null ? detail.studentAnswer : this.answers[row][col];
-    this.updateRecogBadge(currentVal || '-');
-    this.highlightCorrectionButton(currentVal);
+    if (this.isTestFinished) {
+      if (detail.isCorrect) {
+        this.updateRecogBadge(detail.correctAnswer);
+      } else {
+        const studentAns = (detail.studentAnswer !== null && detail.studentAnswer !== '') ? detail.studentAnswer : '未';
+        if (this.recogBadge) {
+          this.recogBadge.innerHTML = `<span class="badge-wrong">${studentAns}</span><span class="badge-arrow">➔</span><span class="badge-correct">${detail.correctAnswer}</span>`;
+        }
+      }
+    } else {
+      this.updateRecogBadge(currentVal || '-');
+      this.highlightCorrectionButton(currentVal);
+    }
   }
 
   /**
@@ -715,29 +809,503 @@ class MathGridApp {
    * テスト終了・採点フロー
    */
   finishTest() {
+    this.stopTimer();
     this.isTestFinished = true;
     const result = this.gradeTest();
     console.log('[Phase 3 採点完了]', result);
-    this.showResultModal(result);
+
+    // 学習記録の保存と比較データの生成
+    const comparison = this.saveRecord(result);
+    this.showResultModal(result, comparison);
   }
 
   /**
    * 結果表示モーダルの表示
+   * @param {Object} result 採点結果
+   * @param {Object} [comparison] 過去記録との比較データ
    */
-  showResultModal(result) {
+  showResultModal(result, comparison) {
     if (!this.resultModal) return;
 
     if (this.resultCorrectCount) this.resultCorrectCount.textContent = result.correctCount;
     if (this.resultTotalCount) this.resultTotalCount.textContent = result.totalQuestions;
     if (this.resultAccuracyTag) this.resultAccuracyTag.textContent = `せいとうりつ ${result.accuracyRate}%`;
 
+    // 所要時間（タイム）の表示
+    if (this.resultTimeDisplay) {
+      this.resultTimeDisplay.textContent = this.formatTime(this.timerElapsedMs);
+    }
+
     if (this.bdCorrect) this.bdCorrect.textContent = result.correctCount;
     if (this.bdIncorrect) this.bdIncorrect.textContent = result.incorrectCount;
     if (this.bdUnanswered) this.bdUnanswered.textContent = result.unansweredCount;
     if (this.bdCorrections) this.bdCorrections.textContent = `${result.correctionCount} かい`;
 
+    // 過去記録との比較カードを描画
+    if (comparison) {
+      this.renderComparisonBox(comparison);
+    }
+
     this.resultModal.classList.add('is-open');
     this.resultModal.setAttribute('aria-hidden', 'false');
+  }
+
+  /**
+   * テスト結果をlocalStorageに保存し、過去記録との比較データを生成
+   * @param {Object} result 採点結果
+   * @returns {Object} 比較データ
+   */
+  saveRecord(result) {
+    const history = this.getHistory();
+    const prevRecord = history.length > 0 ? history[0] : null;
+    const bestRecord = this.getBestRecord(history);
+
+    const now = new Date();
+    const dateFormatted = `${now.getMonth() + 1}/${now.getDate()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+
+    const newRecord = {
+      id: Date.now(),
+      date: dateFormatted,
+      timestamp: Date.now(),
+      gridSize: this.gridSize,
+      gridLabel: `${this.gridSize}×${this.gridSize}`,
+      operation: this.operation,
+      elapsedMs: Math.round(this.timerElapsedMs),
+      timeFormatted: this.formatTime(this.timerElapsedMs),
+      correctCount: result.correctCount,
+      totalQuestions: result.totalQuestions,
+      accuracyRate: result.accuracyRate,
+      incorrectCount: result.incorrectCount,
+      unansweredCount: result.unansweredCount,
+      correctionCount: result.correctionCount
+    };
+
+    // 比較データの算出
+    let comparison = {
+      isFirstTime: history.length === 0,
+      isBestRecord: false,
+      prevRecord: prevRecord,
+      bestRecord: bestRecord,
+      timeDiffSec: null,     // 負なら早くなった（短縮）、正なら遅くなった
+      accuracyDiff: null     // 正ならアップ、負ならダウン
+    };
+
+    if (prevRecord) {
+      comparison.timeDiffSec = Math.round((newRecord.elapsedMs - prevRecord.elapsedMs) / 1000);
+      comparison.accuracyDiff = newRecord.accuracyRate - prevRecord.accuracyRate;
+    }
+
+    // 自己ベスト判定（正答率が最も高く、同率ならタイムが最短）
+    if (!bestRecord) {
+      comparison.isBestRecord = true;
+    } else if (newRecord.accuracyRate > bestRecord.accuracyRate) {
+      comparison.isBestRecord = true;
+    } else if (newRecord.accuracyRate === bestRecord.accuracyRate && newRecord.elapsedMs < bestRecord.elapsedMs) {
+      comparison.isBestRecord = true;
+    }
+
+    // 新規記録を先頭に追加（最大50件保存）
+    history.unshift(newRecord);
+    if (history.length > 50) history.pop();
+
+    try {
+      localStorage.setItem(this.historyKey, JSON.stringify(history));
+      console.log('[学習記録] 保存完了:', newRecord);
+    } catch (e) {
+      console.warn('[学習記録] localStorageへの保存に失敗しました:', e);
+    }
+
+    return comparison;
+  }
+
+  /**
+   * localStorageから学習記録を取得
+   * @returns {Array}
+   */
+  getHistory() {
+    try {
+      const data = localStorage.getItem(this.historyKey);
+      return data ? JSON.parse(data) : [];
+    } catch (e) {
+      console.warn('[学習記録] 読み込みエラー:', e);
+      return [];
+    }
+  }
+
+  /**
+   * 履歴から自己ベスト記録（最高正答率 ＆ 最速タイム）を取得
+   * @param {Array} history
+   * @returns {Object|null}
+   */
+  getBestRecord(history) {
+    if (!history || history.length === 0) return null;
+    let best = history[0];
+    for (let i = 1; i < history.length; i++) {
+      const rec = history[i];
+      if (rec.accuracyRate > best.accuracyRate) {
+        best = rec;
+      } else if (rec.accuracyRate === best.accuracyRate && rec.elapsedMs < best.elapsedMs) {
+        best = rec;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * 児童の自己肯定感と成長意欲を育む前向きメッセージを取得
+   * （結果が伸びなかった場合でも、過程や挑戦を肯定するメッセージを複数候補から選択）
+   * @param {Object} comp 比較データ
+   * @returns {{ icon: string, title: string, text: string }}
+   */
+  getCheerMessage(comp) {
+    const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+
+    // 1. はじめて解いたとき
+    if (comp.isFirstTime) {
+      return pick([
+        {
+          icon: '🌱',
+          title: 'はじめてのちょうせん！',
+          text: 'さいしょの１歩をふみ出せたね！これから自分のペースで楽しもう！'
+        },
+        {
+          icon: '✨',
+          title: 'すてきなスタート！',
+          text: 'さいごまでやりきってえらい！ここからキミの記録がはじまるよ。'
+        },
+        {
+          icon: '🎉',
+          title: 'きろくの第１歩！',
+          text: '100マス計算にチャレンジできたね！つづけるほど、どんどん得意になるよ。'
+        }
+      ]);
+    }
+
+    // 2. 自己ベスト更新のとき
+    if (comp.isBestRecord) {
+      return pick([
+        {
+          icon: '🏆',
+          title: '自己ベスト更新！',
+          text: 'これまででいちばんの記録！コツコツつづけてきた努力のたまものだね！'
+        },
+        {
+          icon: '🚀',
+          title: '新きろく達成！',
+          text: '過去の自分を大きくこえられたね！すばらしい集中力でした！'
+        },
+        {
+          icon: '⭐',
+          title: '大かつやく！',
+          text: 'じぶんの力でつかんだ最高の記録！この調子で自信を持っていこう！'
+        }
+      ]);
+    }
+
+    const timeDiff = comp.timeDiffSec || 0;
+    const accDiff = comp.accuracyDiff || 0;
+
+    // 3. 正答率が下がってしまったとき（間違いを見直して前向きになれるメッセージ）
+    if (accDiff < 0) {
+      return pick([
+        {
+          icon: '💪',
+          title: 'まちがいは「のびしろ」！',
+          text: 'まちがえた問題こそ、もっと賢くなれる大チャンス！「見直し」で正解をたしかめてみよう！'
+        },
+        {
+          icon: '🔍',
+          title: '次につながる大事な一歩！',
+          text: 'むずかしい問題にもにげずに立ち向かったね！見直してもう1回やれば、次はきっとできるよ。'
+        },
+        {
+          icon: '📖',
+          title: 'ここからパワーアップ！',
+          text: '失敗はできるようになったことの前ぶれだよ。どこでまちがえたか見直しモードでチェックしてみよう！'
+        },
+        {
+          icon: '✨',
+          title: 'ちょうせんした証拠！',
+          text: 'まちがいをおそれず解いたのがえらい！答えをたしかめて、もう一歩前へ進もう！'
+        }
+      ]);
+    }
+
+    // 4. タイムが前回より遅くなったとき（焦らず丁寧に解いたことを肯定）
+    if (timeDiff > 2) {
+      return pick([
+        {
+          icon: '🐢',
+          title: 'ていねいに向き合えたね！',
+          text: 'あわてずに、じっくり考えられた証拠だよ。ていねいに計算する習慣が本当の実力になるよ！'
+        },
+        {
+          icon: '💡',
+          title: 'しっかり考えたナイス集中力！',
+          text: 'スピードよりも、一問一問ていねいに解いた時間が力になるよ。その調子！'
+        },
+        {
+          icon: '🌿',
+          title: '落ち着いて取り組めたね！',
+          text: '自分のペースを大切にして解けたね。あせらず着実に進むのがいちばんの近道だよ。'
+        },
+        {
+          icon: '🎯',
+          title: 'じっくり解いてえらい！',
+          text: '速さだけがすべてじゃないよ！しっかり考えて最後まで解ききった集中力がすばらしい！'
+        }
+      ]);
+    }
+
+    // 5. 前回とほぼ変わらないとき（継続と安定した実力を称賛）
+    if (Math.abs(timeDiff) <= 2 && accDiff === 0) {
+      return pick([
+        {
+          icon: '👏',
+          title: 'つづけていて本当にえらい！',
+          text: '毎日コツコツ続けられることが、一番の才能だよ！安定したリズムがつかめているね。'
+        },
+        {
+          icon: '⭐',
+          title: 'ぶれない集中力！',
+          text: 'いつも通りの力をしっかり発揮できたね！安定して解けるのも大切な実力だよ。'
+        },
+        {
+          icon: '🌿',
+          title: 'いいペースをつかんでるね！',
+          text: '同じ集中力をキープしてやりきったね！この積み重ねが、大きな力にかわっていくよ。'
+        },
+        {
+          icon: '🎯',
+          title: 'ナイスキープ！',
+          text: '力を安定して出せているね！続けることで、ある日ぐんと記録が伸びる日がやってくるよ。'
+        }
+      ]);
+    }
+
+    // 6. タイムが早くなり正答率も伸びたとき（素直な前進を応援）
+    if (timeDiff < 0 || accDiff > 0) {
+      return pick([
+        {
+          icon: '🚀',
+          title: '前回の自分をこえられたね！',
+          text: '少しずつ確実に前へ進んでるよ！練習の成果がしっかり形になってあらわれたね！'
+        },
+        {
+          icon: '🌈',
+          title: 'いいリズムで解けたね！',
+          text: '前回の記録を上回ったね！手ごたえを感じながら、楽しくつづけていこう！'
+        },
+        {
+          icon: '✨',
+          title: 'ナイスステップアップ！',
+          text: '少しずつスピードも正しさも身についてきているよ！次のチャレンジも楽しみだね！'
+        }
+      ]);
+    }
+
+    // 7. その他の場合（自己ベストには届かなかったが挑戦したとき）
+    return pick([
+      {
+        icon: '🌈',
+        title: 'ベストはいつでも待っている！',
+        text: '記録は波があるのがあたりまえ！今日最後までやりきったことが、何よりすばらしいよ！'
+      },
+      {
+        icon: '✊',
+        title: 'ちょうせんするキミが一番！',
+        text: 'ベスト更新をめざして立ち向かった勇気が花丸！何度でも再挑戦してみよう！'
+      },
+      {
+        icon: '🌟',
+        title: '今日の努力はムダにならない！',
+        text: '一歩一歩の積み重ねがキミの力になっているよ。今日も最後までよくがんばりました！'
+      }
+    ]);
+  }
+
+  /**
+   * 結果モーダル内の過去記録比較カードを描画
+   * @param {Object} comp
+   */
+  renderComparisonBox(comp) {
+    if (!this.resultComparisonBox) return;
+
+    // 前向きな励ましメッセージの選定
+    const cheer = this.getCheerMessage(comp);
+
+    if (comp.isFirstTime) {
+      this.resultComparisonBox.innerHTML = `
+        <div class="comp-card">
+          <div class="comp-cheer-section comp-cheer-first">
+            <div class="comp-cheer-icon">${cheer.icon}</div>
+            <div class="comp-cheer-content">
+              <strong class="comp-cheer-title">${cheer.title}</strong>
+              <p class="comp-cheer-text">${cheer.text}</p>
+            </div>
+          </div>
+        </div>
+      `;
+      return;
+    }
+
+    let bestBadge = '';
+    if (comp.isBestRecord) {
+      bestBadge = `
+        <div class="comp-badge-best">
+          🏆 <strong>自己ベスト更新！</strong> 最高記録達成！
+        </div>
+      `;
+    }
+
+    // 前回とのタイム比較（やさしい言葉遣い）
+    let timeText = '';
+    if (comp.timeDiffSec !== null) {
+      if (comp.timeDiffSec < 0) {
+        timeText = `<div class="comp-stat-item"><span class="comp-stat-icon">⚡</span> タイム: 前回より <strong>${Math.abs(comp.timeDiffSec)}秒 短縮！</strong></div>`;
+      } else if (comp.timeDiffSec === 0) {
+        timeText = `<div class="comp-stat-item"><span class="comp-stat-icon">⏱️</span> タイム: 前回と同じ</div>`;
+      } else {
+        timeText = `<div class="comp-stat-item text-muted"><span class="comp-stat-icon">⏱️</span> タイム: 前回 ${comp.prevRecord.timeFormatted}（じっくり解いたね）</div>`;
+      }
+    }
+
+    // 前回との正答率比較（やさしい言葉遣い）
+    let accText = '';
+    if (comp.accuracyDiff !== null) {
+      if (comp.accuracyDiff > 0) {
+        accText = `<div class="comp-stat-item"><span class="comp-stat-icon">📈</span> 正とう率: 前回より <strong>+${comp.accuracyDiff}% アップ！</strong></div>`;
+      } else if (comp.accuracyDiff === 0) {
+        accText = `<div class="comp-stat-item"><span class="comp-stat-icon">🎯</span> 正とう率: 前回をキープ (${comp.prevRecord.accuracyRate}%)</div>`;
+      } else {
+        accText = `<div class="comp-stat-item text-muted"><span class="comp-stat-icon">✏️</span> 正とう率: 前回 ${comp.prevRecord.accuracyRate}%（見直してみよう！）</div>`;
+      }
+    }
+
+    // 自己ベスト参考表示（今回がベストでない場合）
+    let bestRef = '';
+    if (!comp.isBestRecord && comp.bestRecord) {
+      bestRef = `<div class="comp-best-ref">👑 自己ベスト: 正とう率 <strong>${comp.bestRecord.accuracyRate}%</strong> (⏱️ ${comp.bestRecord.timeFormatted})</div>`;
+    }
+
+    this.resultComparisonBox.innerHTML = `
+      <div class="comp-card">
+        <!-- 温かい励ましメッセージ -->
+        <div class="comp-cheer-section">
+          <div class="comp-cheer-icon">${cheer.icon}</div>
+          <div class="comp-cheer-content">
+            <strong class="comp-cheer-title">${cheer.title}</strong>
+            <p class="comp-cheer-text">${cheer.text}</p>
+          </div>
+        </div>
+
+        ${bestBadge}
+
+        <!-- 数値のやさしい比較 -->
+        <div class="comp-details-section">
+          <div class="comp-header">📊 前回の自分とくらべると...</div>
+          <div class="comp-stats-list">
+            ${accText}
+            ${timeText}
+          </div>
+        </div>
+
+        ${bestRef}
+      </div>
+    `;
+  }
+
+  /**
+   * 履歴モーダルの一覧描画
+   */
+  renderHistoryList() {
+    const history = this.getHistory();
+    const best = this.getBestRecord(history);
+
+    // 自己ベストカードの描画
+    if (this.bestRecordStats) {
+      if (best) {
+        this.bestRecordStats.innerHTML = `
+          <div class="best-stat-item">
+            <span class="best-stat-lbl">最高 正とう率</span>
+            <strong class="best-stat-val text-success">${best.accuracyRate}%</strong>
+            <span class="best-stat-sub">(${best.correctCount}/${best.totalQuestions} 問)</span>
+          </div>
+          <div class="best-stat-item">
+            <span class="best-stat-lbl">最速タイム</span>
+            <strong class="best-stat-val text-primary">${best.timeFormatted}</strong>
+            <span class="best-stat-sub">${best.date}</span>
+          </div>
+        `;
+      } else {
+        this.bestRecordStats.innerHTML = `<span class="text-muted">まだ記録がありません</span>`;
+      }
+    }
+
+    // 履歴アイテム一覧の描画
+    if (this.historyListItems) {
+      if (history.length === 0) {
+        this.historyListItems.innerHTML = `
+          <div class="history-empty">
+            <span>📝 まだ記録がありません。100マス計算を解いてみよう！</span>
+          </div>
+        `;
+      } else {
+        this.historyListItems.innerHTML = history.map((rec) => {
+          const isBest = best && rec.id === best.id;
+          const isPerfect = rec.accuracyRate === 100;
+          return `
+            <div class="history-row ${isBest ? 'is-best-row' : ''}">
+              <div class="history-col-info">
+                <span class="h-date">${rec.date}</span>
+                <span class="h-mode">${rec.gridLabel} たしざん</span>
+                ${isBest ? '<span class="h-badge-best">🏆 ベスト</span>' : ''}
+              </div>
+              <div class="history-col-score">
+                <span class="h-acc ${isPerfect ? 'text-success' : ''}">${rec.accuracyRate}%</span>
+                <span class="h-count">${rec.correctCount}/${rec.totalQuestions}</span>
+              </div>
+              <div class="history-col-time">
+                <span class="h-time">⏱️ ${rec.timeFormatted}</span>
+              </div>
+            </div>
+          `;
+        }).join('');
+      }
+    }
+  }
+
+  /**
+   * 履歴モーダルを開く
+   */
+  openHistoryModal() {
+    this.renderHistoryList();
+    if (this.historyModal) {
+      this.historyModal.classList.add('is-open');
+      this.historyModal.setAttribute('aria-hidden', 'false');
+    }
+  }
+
+  /**
+   * 履歴モーダルを閉じる
+   */
+  closeHistoryModal() {
+    if (this.historyModal) {
+      this.historyModal.classList.remove('is-open');
+      this.historyModal.setAttribute('aria-hidden', 'true');
+    }
+  }
+
+  /**
+   * 履歴を消去
+   */
+  clearHistory() {
+    if (confirm('これまでの学習きろくをすべて消去しますか？\n（この操作は元に戻せません）')) {
+      try {
+        localStorage.removeItem(this.historyKey);
+      } catch (_) {}
+      this.renderHistoryList();
+    }
   }
 
   /**
@@ -749,7 +1317,20 @@ class MathGridApp {
       this.resultModal.setAttribute('aria-hidden', 'true');
     }
 
-    // グリッドの各マスに正誤スタイルを適用
+    // ヘッダーの「おわる」ボタンを「📊 けっか」にして結果モーダルを再度開けるようにする
+    if (this.btnQuit) {
+      this.btnQuit.textContent = '📊 けっか';
+      this.btnQuit.classList.add('is-review-btn');
+    }
+
+    // ステータスバーに見直し中の案内を表示
+    const result = this.gradeTest();
+    const counterContainer = document.querySelector('.status-counter');
+    if (counterContainer) {
+      counterContainer.innerHTML = `<span class="counter-label">みなおし</span> <span class="counter-val"><span class="text-success">⭕ ${result.correctCount}</span> / <span class="text-danger">❌ ${result.incorrectCount}</span></span>`;
+    }
+
+    // グリッドの各マスに正誤スタイルと「児童の答え ＆ 正解」を適用
     for (let r = 0; r < this.gridSize; r++) {
       for (let c = 0; c < this.gridSize; c++) {
         const cellEl = this.getCellElement(r, c);
@@ -758,8 +1339,14 @@ class MathGridApp {
           cellEl.classList.remove('is-review-correct', 'is-review-incorrect');
           if (detail.isCorrect) {
             cellEl.classList.add('is-review-correct');
+            cellEl.innerHTML = `<span class="cell-review-right">${detail.correctAnswer}</span>`;
           } else {
             cellEl.classList.add('is-review-incorrect');
+            const studentText = (detail.studentAnswer !== null && detail.studentAnswer !== '') ? detail.studentAnswer : '未';
+            cellEl.innerHTML = `
+              <span class="cell-review-wrong" title="あなたの答え">${studentText}</span>
+              <span class="cell-review-correct-badge" title="せいかい">${detail.correctAnswer}</span>
+            `;
           }
         }
       }
@@ -793,6 +1380,19 @@ class MathGridApp {
 
     this.isTestFinished = false;
 
+    // ヘッダーのボタンをもとに戻す
+    if (this.btnQuit) {
+      this.btnQuit.textContent = 'おわる';
+      this.btnQuit.classList.remove('is-review-btn');
+    }
+
+    // ステータスカウンターをもとに戻す
+    const counterContainer = document.querySelector('.status-counter');
+    if (counterContainer) {
+      counterContainer.innerHTML = `<span class="counter-label">のこり</span> <span class="counter-val"><strong id="progress-count">0</strong> / ${this.totalCells} マス</span>`;
+      this.progressCountEl = document.getElementById('progress-count');
+    }
+
     // グリッドのスタイルクリア
     const cells = this.gridContainer.querySelectorAll('.answer-cell');
     cells.forEach(c => {
@@ -806,6 +1406,8 @@ class MathGridApp {
     this.clearCurrentCell();
     this.setActiveCell(0, 0);
     this.updateProgress();
+    this.resetTimer();
+    this.startTimer();
     console.log('[再挑戦] 新しい問題で再スタートしました。');
   }
 
@@ -869,6 +1471,9 @@ class MathGridApp {
       this.btnQuit.addEventListener('click', () => {
         if (!this.isTestFinished) {
           this.finishTest();
+        } else {
+          // 見直しモード中なら結果モーダルを再表示
+          this.showResultModal(this.gradeTest());
         }
       });
     }
@@ -879,6 +1484,20 @@ class MathGridApp {
 
     if (this.btnRestart) {
       this.btnRestart.addEventListener('click', () => this.restartTest());
+    }
+
+    // 学習記録（履歴モーダル）のイベントリスナー
+    if (this.btnHeaderHistory) {
+      this.btnHeaderHistory.addEventListener('click', () => this.openHistoryModal());
+    }
+    if (this.btnModalHistory) {
+      this.btnModalHistory.addEventListener('click', () => this.openHistoryModal());
+    }
+    if (this.btnCloseHistory) {
+      this.btnCloseHistory.addEventListener('click', () => this.closeHistoryModal());
+    }
+    if (this.btnClearHistory) {
+      this.btnClearHistory.addEventListener('click', () => this.clearHistory());
     }
 
     // きき手（右利き・左利き）切り替えボタン
@@ -903,10 +1522,10 @@ class MathGridApp {
         e.preventDefault();
         if (row > 0) this.setActiveCell(row - 1, col);
       } else if (e.key >= '0' && e.key <= '9') {
-        this.handleKeypadInput(e.key);
+        if (!this.isTestFinished) this.handleKeypadInput(e.key);
       } else if (e.key === 'Backspace' || e.key === 'Delete') {
         e.preventDefault();
-        this.clearCurrentCell();
+        if (!this.isTestFinished) this.clearCurrentCell();
       } else if (e.key === 'Enter') {
         e.preventDefault();
         this.moveToNextCell();
