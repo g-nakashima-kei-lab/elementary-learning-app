@@ -5,14 +5,18 @@
 
 class MathGridApp {
   constructor() {
-    this.gridSize = 5; // 5x5マス（プロトタイプ）
+    // グリッドサイズ（設定値として行数・列数を独立管理。将来の5x10や6x8等の拡張にも対応）
+    this.rows = parseInt(localStorage.getItem('manabi_grid_rows') || '5', 10);
+    this.cols = parseInt(localStorage.getItem('manabi_grid_cols') || '5', 10);
+    this.gridSize = this.rows; // 既存コードとの互換性用
+    this.totalCells = this.rows * this.cols;
+
     this.operation = '+';
     this.rowHeaders = [];
     this.colHeaders = [];
     this.activeCell = { row: 0, col: 0 };
-    this.answers = []; // 5x5 2D配列 (表示用)
-    this.details = []; // 5x5 2D配列 (ResultDetail構造)
-    this.totalCells = this.gridSize * this.gridSize;
+    this.answers = []; // rows x cols 2D配列 (表示用)
+    this.details = []; // rows x cols 2D配列 (ResultDetail構造)
 
     // ストローク認識エンジン
     this.recognizer = new StrokeRecognizer();
@@ -30,6 +34,10 @@ class MathGridApp {
     this.progressCountEl = document.getElementById('progress-count');
     this.btnPrevCell = document.getElementById('btn-prev-cell');
     this.btnNextCell = document.getElementById('btn-next-cell');
+    this.testTitleEl = document.getElementById('test-title');
+
+    // 指導者用設定UI
+    this.selectGridSize = document.getElementById('select-grid-size');
 
     // Phase 2 入力要素キャッシュ
     this.tabHandwriting = document.getElementById('tab-handwriting');
@@ -83,6 +91,9 @@ class MathGridApp {
     this.historyListItems = document.getElementById('history-list-items');
     this.bestRecordStats = document.getElementById('best-record-stats');
 
+    // 結果モーダルを閉じるボタン（✕）
+    this.btnCloseResult = document.getElementById('btn-close-result');
+
     this.init();
   }
 
@@ -90,6 +101,7 @@ class MathGridApp {
    * 初期化
    */
   init() {
+    this.syncGridSizeUI();
     this.generateHeaders();
     this.initAnswers();
     this.renderGrid();
@@ -99,11 +111,46 @@ class MathGridApp {
     this.attachEventListeners();
     this.updateProgress();
     this.startTimer();
-    console.log('MathGridApp initialized successfully.');
+    console.log(`MathGridApp initialized successfully (${this.rows}x${this.cols}, total: ${this.totalCells} cells).`);
   }
 
   /**
-   * 1桁の数字（1〜9）を重複なくランダムに選択して見出しを生成
+   * 指導者設定UI（セレクト）とステータス表示の同期
+   */
+  syncGridSizeUI() {
+    if (this.selectGridSize) {
+      this.selectGridSize.value = `${this.rows}x${this.cols}`;
+    }
+    if (this.testTitleEl) {
+      this.testTitleEl.textContent = `たしざん (${this.rows}×${this.cols} マス)`;
+    }
+  }
+
+  /**
+   * 指導者によるグリッドサイズ変更（問題開始前または設定時）
+   * @param {number} rows 行数
+   * @param {number} cols 列数
+   */
+  setGridDimensions(rows, cols) {
+    if (this.rows === rows && this.cols === cols) return;
+    this.rows = rows;
+    this.cols = cols;
+    this.gridSize = rows;
+    this.totalCells = rows * cols;
+
+    try {
+      localStorage.setItem('manabi_grid_rows', String(rows));
+      localStorage.setItem('manabi_grid_cols', String(cols));
+    } catch (_) {}
+
+    this.syncGridSizeUI();
+    this.restartTest();
+    console.log(`[指導者設定] グリッドサイズを ${rows}x${cols} (${this.totalCells}問) に変更しました。`);
+  }
+
+  /**
+   * 数字（0〜9の標準数字群）をランダムに並べて見出しを生成
+   * 行数・列数に応じて柔軟にスライス
    */
   generateHeaders() {
     const shuffle = (array) => {
@@ -115,26 +162,39 @@ class MathGridApp {
       return arr;
     };
 
-    const digits = [1, 2, 3, 4, 5, 6, 7, 8, 9];
-    this.rowHeaders = shuffle(digits).slice(0, this.gridSize);
-    this.colHeaders = shuffle(digits).slice(0, this.gridSize);
+    // 0〜9の10個の基本数字（100マス計算の標準数字）
+    const baseDigits = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
+
+    // 行ヘッダーの生成
+    let rPool = shuffle(baseDigits);
+    while (rPool.length < this.rows) {
+      rPool = rPool.concat(shuffle(baseDigits));
+    }
+    this.rowHeaders = rPool.slice(0, this.rows);
+
+    // 列ヘッダーの生成
+    let cPool = shuffle(baseDigits);
+    while (cPool.length < this.cols) {
+      cPool = cPool.concat(shuffle(baseDigits));
+    }
+    this.colHeaders = cPool.slice(0, this.cols);
   }
 
   /**
-   * 解答配列およびResultDetail詳細モデルの初期化
+   * 解答配列およびResultDetail詳細モデルの初期化（rows x cols）
    */
   initAnswers() {
-    this.answers = Array.from({ length: this.gridSize }, () =>
-      Array.from({ length: this.gridSize }, () => '')
+    this.answers = Array.from({ length: this.rows }, () =>
+      Array.from({ length: this.cols }, () => '')
     );
 
     // 指針に基づくResultDetailの初期化
-    this.details = Array.from({ length: this.gridSize }, (_, r) =>
-      Array.from({ length: this.gridSize }, (_, c) => {
+    this.details = Array.from({ length: this.rows }, (_, r) =>
+      Array.from({ length: this.cols }, (_, c) => {
         const rowNum = this.rowHeaders[r];
         const colNum = this.colHeaders[c];
         return {
-          index: r * this.gridSize + c,
+          index: r * this.cols + c,
           rowNum,
           colNum,
           operation: this.operation,
@@ -151,10 +211,20 @@ class MathGridApp {
   }
 
   /**
-   * 6×6（演算子マス1 + 見出し5 + 解答25）のDOMグリッドを構築
+   * (cols+1)×(rows+1) のDOMグリッドを構築
    */
   renderGrid() {
     this.gridContainer.innerHTML = '';
+
+    // CSS変数でグリッドの列数を設定（5x5なら6列、10x10なら11列）
+    this.gridContainer.style.setProperty('--grid-cols', this.cols + 1);
+
+    // 10x10（またはマス数が多い場合）専用のスタイルクラスを適用
+    if (this.cols >= 10 || this.rows >= 10) {
+      this.gridContainer.classList.add('is-size-10');
+    } else {
+      this.gridContainer.classList.remove('is-size-10');
+    }
 
     // (0, 0) 演算子マス
     const opCell = document.createElement('div');
@@ -162,8 +232,8 @@ class MathGridApp {
     opCell.textContent = this.operation;
     this.gridContainer.appendChild(opCell);
 
-    // (0, 1..5) 列見出しマス
-    for (let c = 0; c < this.gridSize; c++) {
+    // (0, 1..cols) 列見出しマス
+    for (let c = 0; c < this.cols; c++) {
       const colCell = document.createElement('div');
       colCell.className = 'grid-cell col-header';
       colCell.textContent = this.colHeaders[c];
@@ -171,8 +241,8 @@ class MathGridApp {
       this.gridContainer.appendChild(colCell);
     }
 
-    // 各行（行見出し + 5つの解答マス）
-    for (let r = 0; r < this.gridSize; r++) {
+    // 各行（行見出し + cols個の解答マス）
+    for (let r = 0; r < this.rows; r++) {
       // (r+1, 0) 行見出しマス
       const rowCell = document.createElement('div');
       rowCell.className = 'grid-cell row-header';
@@ -180,8 +250,8 @@ class MathGridApp {
       rowCell.setAttribute('data-row', r);
       this.gridContainer.appendChild(rowCell);
 
-      // (r+1, 1..5) 解答マス
-      for (let c = 0; c < this.gridSize; c++) {
+      // (r+1, 1..cols) 解答マス
+      for (let c = 0; c < this.cols; c++) {
         const ansCell = document.createElement('div');
         ansCell.className = 'grid-cell answer-cell';
         ansCell.setAttribute('data-row', r);
@@ -610,7 +680,7 @@ class MathGridApp {
    * 指定したマスをアクティブ（フォーカス）にする
    */
   setActiveCell(row, col) {
-    if (row < 0 || row >= this.gridSize || col < 0 || col >= this.gridSize) {
+    if (row < 0 || row >= this.rows || col < 0 || col >= this.cols) {
       return;
     }
 
@@ -691,11 +761,11 @@ class MathGridApp {
   moveToNextCell() {
     let { row, col } = this.activeCell;
     col++;
-    if (col >= this.gridSize) {
+    if (col >= this.cols) {
       col = 0;
       row++;
     }
-    if (row >= this.gridSize) {
+    if (row >= this.rows) {
       console.log('すべてのマスに到達しました');
       return;
     }
@@ -709,7 +779,7 @@ class MathGridApp {
     let { row, col } = this.activeCell;
     col--;
     if (col < 0) {
-      col = this.gridSize - 1;
+      col = this.cols - 1;
       row--;
     }
     if (row < 0) {
@@ -740,8 +810,8 @@ class MathGridApp {
    */
   updateProgress() {
     let filledCount = 0;
-    for (let r = 0; r < this.gridSize; r++) {
-      for (let c = 0; c < this.gridSize; c++) {
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
         if (this.answers[r][c] !== '' && this.answers[r][c] !== null) {
           filledCount++;
         }
@@ -769,8 +839,8 @@ class MathGridApp {
     let unansweredCount = 0;
     let correctionCount = 0;
 
-    for (let r = 0; r < this.gridSize; r++) {
-      for (let c = 0; c < this.gridSize; c++) {
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
         const detail = this.details[r][c];
         const studentVal = detail.studentAnswer !== null && detail.studentAnswer !== '' 
           ? Number(detail.studentAnswer) 
@@ -857,8 +927,17 @@ class MathGridApp {
    */
   saveRecord(result) {
     const history = this.getHistory();
-    const prevRecord = history.length > 0 ? history[0] : null;
-    const bestRecord = this.getBestRecord(history);
+    const currentGridLabel = `${this.rows}×${this.cols}`;
+
+    // ★重要: 5x5と10x10の記録を混同しないよう、同じグリッドサイズの記録のみを抽出して比較
+    const sameSizeHistory = history.filter(rec =>
+      rec.gridLabel === currentGridLabel ||
+      (rec.rows === this.rows && rec.cols === this.cols) ||
+      (!rec.rows && this.rows === 5 && rec.gridSize === 5)
+    );
+
+    const prevRecord = sameSizeHistory.length > 0 ? sameSizeHistory[0] : null;
+    const bestRecord = this.getBestRecord(sameSizeHistory);
 
     const now = new Date();
     const dateFormatted = `${now.getMonth() + 1}/${now.getDate()} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
@@ -867,8 +946,10 @@ class MathGridApp {
       id: Date.now(),
       date: dateFormatted,
       timestamp: Date.now(),
-      gridSize: this.gridSize,
-      gridLabel: `${this.gridSize}×${this.gridSize}`,
+      gridSize: this.rows,
+      gridLabel: currentGridLabel,
+      rows: this.rows,
+      cols: this.cols,
       operation: this.operation,
       elapsedMs: Math.round(this.timerElapsedMs),
       timeFormatted: this.formatTime(this.timerElapsedMs),
@@ -1220,25 +1301,33 @@ class MathGridApp {
    */
   renderHistoryList() {
     const history = this.getHistory();
-    const best = this.getBestRecord(history);
+    const currentGridLabel = `${this.rows}×${this.cols}`;
+
+    // 現在選択中のグリッドサイズの自己ベストを抽出
+    const currentSizeHistory = history.filter(rec =>
+      rec.gridLabel === currentGridLabel ||
+      (rec.rows === this.rows && rec.cols === this.cols) ||
+      (!rec.rows && this.rows === 5 && rec.gridSize === 5)
+    );
+    const best = this.getBestRecord(currentSizeHistory);
 
     // 自己ベストカードの描画
     if (this.bestRecordStats) {
       if (best) {
         this.bestRecordStats.innerHTML = `
           <div class="best-stat-item">
-            <span class="best-stat-lbl">最高 正とう率</span>
+            <span class="best-stat-lbl">${currentGridLabel} 最高正とう率</span>
             <strong class="best-stat-val text-success">${best.accuracyRate}%</strong>
             <span class="best-stat-sub">(${best.correctCount}/${best.totalQuestions} 問)</span>
           </div>
           <div class="best-stat-item">
-            <span class="best-stat-lbl">最速タイム</span>
+            <span class="best-stat-lbl">${currentGridLabel} 最速タイム</span>
             <strong class="best-stat-val text-primary">${best.timeFormatted}</strong>
             <span class="best-stat-sub">${best.date}</span>
           </div>
         `;
       } else {
-        this.bestRecordStats.innerHTML = `<span class="text-muted">まだ記録がありません</span>`;
+        this.bestRecordStats.innerHTML = `<span class="text-muted">まだ ${currentGridLabel} の記録がありません</span>`;
       }
     }
 
@@ -1309,6 +1398,26 @@ class MathGridApp {
   }
 
   /**
+   * 結果モーダルを閉じる（✕ボタンまたは背景クリック時）
+   * 閉じた後は盤面をそのまま見直せる状態（見直しモード）にする
+   */
+  closeResultModal() {
+    if (this.resultModal) {
+      this.resultModal.classList.remove('is-open');
+      this.resultModal.setAttribute('aria-hidden', 'true');
+    }
+
+    // ヘッダーの「おわる」ボタンを「📊 けっか」にして結果モーダルを再度開けるようにする
+    if (this.btnQuit) {
+      this.btnQuit.textContent = '📊 けっか';
+      this.btnQuit.classList.add('is-review-btn');
+    }
+
+    // 盤面を正誤表示にしてすぐ確認できるようにする
+    this.startReviewMode();
+  }
+
+  /**
    * 結果モーダルを閉じ、間違えた問題を見直すモード
    */
   startReviewMode() {
@@ -1331,8 +1440,8 @@ class MathGridApp {
     }
 
     // グリッドの各マスに正誤スタイルと「児童の答え ＆ 正解」を適用
-    for (let r = 0; r < this.gridSize; r++) {
-      for (let c = 0; c < this.gridSize; c++) {
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
         const cellEl = this.getCellElement(r, c);
         const detail = this.details[r][c];
         if (cellEl) {
@@ -1354,8 +1463,8 @@ class MathGridApp {
 
     // 最初の間違えた問題、または(0, 0)にフォーカス
     let firstIncorrect = null;
-    for (let r = 0; r < this.gridSize; r++) {
-      for (let c = 0; c < this.gridSize; c++) {
+    for (let r = 0; r < this.rows; r++) {
+      for (let c = 0; c < this.cols; c++) {
         if (!this.details[r][c].isCorrect && firstIncorrect === null) {
           firstIncorrect = { r, c };
         }
@@ -1486,6 +1595,18 @@ class MathGridApp {
       this.btnRestart.addEventListener('click', () => this.restartTest());
     }
 
+    // 結果モーダルの✕ボタンおよび背景クリックで閉じる
+    if (this.btnCloseResult) {
+      this.btnCloseResult.addEventListener('click', () => this.closeResultModal());
+    }
+    if (this.resultModal) {
+      this.resultModal.addEventListener('click', (e) => {
+        if (e.target === this.resultModal) {
+          this.closeResultModal();
+        }
+      });
+    }
+
     // 学習記録（履歴モーダル）のイベントリスナー
     if (this.btnHeaderHistory) {
       this.btnHeaderHistory.addEventListener('click', () => this.openHistoryModal());
@@ -1499,10 +1620,28 @@ class MathGridApp {
     if (this.btnClearHistory) {
       this.btnClearHistory.addEventListener('click', () => this.clearHistory());
     }
+    if (this.historyModal) {
+      this.historyModal.addEventListener('click', (e) => {
+        if (e.target === this.historyModal) {
+          this.closeHistoryModal();
+        }
+      });
+    }
 
     // きき手（右利き・左利き）切り替えボタン
     if (this.btnHandToggle) {
       this.btnHandToggle.addEventListener('click', () => this.toggleHandPreference());
+    }
+
+    // 指導者用グリッドサイズ変更（5x5 / 10x10）
+    if (this.selectGridSize) {
+      this.selectGridSize.addEventListener('change', () => {
+        const val = this.selectGridSize.value;
+        const [r, c] = val.split('x').map(Number);
+        if (r && c) {
+          this.setGridDimensions(r, c);
+        }
+      });
     }
 
     // キーボード操作（PCテスト用 & アクセシビリティ）
@@ -1517,7 +1656,7 @@ class MathGridApp {
         this.moveToPrevCell();
       } else if (e.key === 'ArrowDown') {
         e.preventDefault();
-        if (row < this.gridSize - 1) this.setActiveCell(row + 1, col);
+        if (row < this.rows - 1) this.setActiveCell(row + 1, col);
       } else if (e.key === 'ArrowUp') {
         e.preventDefault();
         if (row > 0) this.setActiveCell(row - 1, col);

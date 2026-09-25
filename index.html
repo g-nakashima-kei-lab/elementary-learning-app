@@ -24,6 +24,15 @@
         </div>
       </div>
       <div class="header-right">
+        <!-- 指導者用設定コントロール（問題開始前設定） -->
+        <div class="teacher-grid-setting" title="指導者用：マス数設定">
+          <label for="select-grid-size" class="teacher-label">⚙️ マス数:</label>
+          <select id="select-grid-size" class="select-grid-size" aria-label="問題マス数設定">
+            <option value="5x5">5×5 (25問)</option>
+            <option value="10x10">10×10 (100問)</option>
+          </select>
+        </div>
+
         <button id="btn-header-history" class="btn-icon btn-history-header" title="これまでのきろく">📜 きろく</button>
         <button id="btn-hand-toggle" class="btn-hand" title="きき手を切り替える">🖐️ みぎきき</button>
         <button id="btn-sound-toggle" class="btn-icon" title="おとの切り替え">🔔</button>
