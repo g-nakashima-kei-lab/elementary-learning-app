@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>学びのノート - 100マス計算・漢字テスト</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800;900&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div id="app">
+    <!-- ヘッダー（児童のGoogleアカウント情報・テスト種別） -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="app-logo">
+          <span class="logo-icon">✏️</span>
+          <span class="logo-title">まなびノート</span>
+        </div>
+        <div class="user-greeting">
+          <span class="greeting-badge">3ねん1くみ</span>
+          <span class="user-name">こんにちは、<strong>たろう</strong> さん</span>
+        </div>
+      </div>
+      <div class="header-right">
+        <button id="btn-hand-toggle" class="btn-hand" title="きき手を切り替える">🖐️ みぎきき</button>
+        <button id="btn-sound-toggle" class="btn-icon" title="おとの切り替え">🔔</button>
+        <button id="btn-quit" class="btn-sub">おわる</button>
+      </div>
+    </header>
+
+    <!-- メインコンテンツ -->
+    <main class="app-main">
+      <!-- 問題ステータスバー -->
+      <section class="status-bar">
+        <div class="status-badge mode-badge">
+          <span class="badge-icon">➕</span>
+          <span class="badge-text" id="test-title">たしざん (5×5 マス)</span>
+        </div>
+        <div class="status-counter">
+          <span class="counter-label">のこり</span>
+          <span class="counter-val"><strong id="progress-count">0</strong> / 25 マス</span>
+        </div>
+        <div class="status-timer">
+          <span class="timer-icon">⏱️</span>
+          <span class="timer-display" id="timer-display">00:00</span>
+        </div>
+      </section>
+
+      <!-- 左右2カラム・ワークスペース（利き手で反転可能） -->
+      <div class="workspace-layout" id="workspace-layout">
+        <!-- カラム1: 計算盤 ＆ 式案内 -->
+        <section class="grid-section">
+          <div class="grid-container" id="math-grid" role="grid" aria-label="計算マス目">
+            <!-- JSで動的生成 -->
+          </div>
+
+          <!-- マス案内コントロール -->
+          <div class="cell-control-bar">
+            <button id="btn-prev-cell" class="btn-step" aria-label="まえのマスへ">⬅️ まえへ</button>
+            <div class="active-cell-info" id="active-cell-info">
+              <span class="calc-formula" id="calc-formula">3 ＋ 4 ＝ ？</span>
+            </div>
+            <button id="btn-next-cell" class="btn-step" aria-label="つぎのマスへ">つぎへ ➡️</button>
+          </div>
+        </section>
+
+        <!-- カラム2: 入力操作エリア（手書きCanvas ＋ 1タップ修正 ＋ 大型テンキー） -->
+        <section class="input-section" id="input-section">
+          <!-- 入力モード切り替えタブ -->
+          <div class="mode-tabs">
+            <button id="tab-handwriting" class="tab-btn is-active" aria-label="手書きモード">✏️ てがき</button>
+            <button id="tab-keypad" class="tab-btn" aria-label="大型テンキーモード">🔢 おおきなテンキー</button>
+          </div>
+
+          <!-- 手書きパネル -->
+          <div id="handwriting-panel" class="input-panel is-active">
+            <div class="canvas-wrapper">
+              <canvas id="draw-canvas" width="460" height="200" aria-label="数字の手書きエリア"></canvas>
+              <div class="canvas-watermark">ここに すうじ を かいてね</div>
+              <div class="canvas-actions">
+                <button id="btn-clear-canvas" class="btn-canvas-action btn-clear" title="書き直す">🗑️ けす</button>
+                <button id="btn-confirm-next" class="btn-canvas-action btn-next" title="次のマスへ進む">つぎへ ➡️</button>
+              </div>
+            </div>
+
+            <!-- 認識結果の確認と1タップ修正バー -->
+            <div class="correction-bar-container">
+              <div class="recognition-display">
+                <span class="recog-label">いまの入力:</span>
+                <span id="recog-badge" class="recog-badge">-</span>
+                <span class="recog-sub">（ちがうときは下の数字をタップしてね）</span>
+              </div>
+              <div class="quick-correction-buttons" id="quick-correction-bar">
+                <!-- 0〜9の1タップ修正ボタン -->
+                <button class="btn-correct" data-num="0">0</button>
+                <button class="btn-correct" data-num="1">1</button>
+                <button class="btn-correct" data-num="2">2</button>
+                <button class="btn-correct" data-num="3">3</button>
+                <button class="btn-correct" data-num="4">4</button>
+                <button class="btn-correct" data-num="5">5</button>
+                <button class="btn-correct" data-num="6">6</button>
+                <button class="btn-correct" data-num="7">7</button>
+                <button class="btn-correct" data-num="8">8</button>
+                <button class="btn-correct" data-num="9">9</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 大型テンキーパネル -->
+          <div id="keypad-panel" class="input-panel">
+            <div class="keypad-grid">
+              <button class="btn-key" data-key="1">1</button>
+              <button class="btn-key" data-key="2">2</button>
+              <button class="btn-key" data-key="3">3</button>
+              <button class="btn-key" data-key="4">4</button>
+              <button class="btn-key" data-key="5">5</button>
+              <button class="btn-key" data-key="6">6</button>
+              <button class="btn-key" data-key="7">7</button>
+              <button class="btn-key" data-key="8">8</button>
+              <button class="btn-key" data-key="9">9</button>
+              <button class="btn-key btn-key-op" id="btn-keypad-clear" data-key="clear">⌫ けす</button>
+              <button class="btn-key" data-key="0">0</button>
+              <button class="btn-key btn-key-enter" id="btn-keypad-enter" data-key="enter">つぎへ ➔</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- 終了時 結果表示モーダル (Phase 3) -->
+    <div id="result-modal" class="modal-backdrop" aria-hidden="true">
+      <div class="modal-card" role="dialog" aria-labelledby="modal-title">
+        <div class="modal-header">
+          <span class="modal-icon">🎉</span>
+          <h2 id="modal-title" class="modal-title">おつかれさま！</h2>
+        </div>
+        <div class="modal-body">
+          <div class="result-score-box">
+            <span class="score-label">せいかい</span>
+            <div class="score-numbers">
+              <span id="result-correct-count" class="score-main">0</span>
+              <span class="score-slash">/</span>
+              <span id="result-total-count" class="score-sub">25</span>
+              <span class="score-unit">もん</span>
+            </div>
+            <div class="accuracy-tag" id="result-accuracy-tag">せいとうりつ 0%</div>
+          </div>
+
+          <div class="result-breakdown">
+            <div class="breakdown-item">
+              <span class="bd-icon">🎯</span>
+              <span class="bd-label">せいかい:</span>
+              <strong id="bd-correct" class="bd-val text-success">0</strong>
+            </div>
+            <div class="breakdown-item">
+              <span class="bd-icon">✏️</span>
+              <span class="bd-label">まちがい:</span>
+              <strong id="bd-incorrect" class="bd-val text-danger">0</strong>
+            </div>
+            <div class="breakdown-item">
+              <span class="bd-icon">⬜</span>
+              <span class="bd-label">のこり:</span>
+              <strong id="bd-unanswered" class="bd-val text-muted">0</strong>
+            </div>
+            <div class="breakdown-item highlight-item">
+              <span class="bd-icon">💡</span>
+              <span class="bd-label">じぶんで直した:</span>
+              <strong id="bd-corrections" class="bd-val text-primary">0 かい</strong>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button id="btn-review-answers" class="btn-modal btn-review">まちがえた問題をみる</button>
+          <button id="btn-restart" class="btn-modal btn-restart">もういちど 挑戦する！ 🔄</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- フッター -->
+    <footer class="app-footer">
+      <span>小学校向け 学習自動採点・記録システム (プロトタイプ Phase 3)</span>
+    </footer>
+  </div>
+
+  <script src="stroke-recognizer.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
