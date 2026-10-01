@@ -78,6 +78,18 @@
 
         <!-- カラム2: 入力操作エリア（手書きCanvas ＋ 1タップ修正 ＋ 大型テンキー） -->
         <section class="input-section" id="input-section">
+          <!-- 手元フォーカス式バナー（現在の問題 ＋ 次の問題を縦配置） -->
+          <div class="input-formula-banner" id="input-formula-banner" aria-live="polite">
+            <div class="current-formula-box">
+              <span class="formula-badge">今の問題</span>
+              <span class="formula-text" id="input-formula-text">3 ＋ 4 ＝ <span class="formula-target">？</span></span>
+            </div>
+            <div class="next-formula-box" id="next-formula-box">
+              <span class="next-badge">次の問題:</span>
+              <span class="next-text" id="next-formula-text">3 ＋ 5 ＝ □</span>
+            </div>
+          </div>
+
           <!-- 入力モード切り替えタブ -->
           <div class="mode-tabs">
             <button id="tab-handwriting" class="tab-btn is-active" aria-label="手書きモード">✏️ てがき</button>
@@ -114,6 +126,7 @@
                 <button class="btn-correct" data-num="7">7</button>
                 <button class="btn-correct" data-num="8">8</button>
                 <button class="btn-correct" data-num="9">9</button>
+                <button class="btn-correct btn-correct-backspace" id="btn-correct-backspace" data-action="backspace" title="1文字消す">⌫</button>
               </div>
             </div>
           </div>

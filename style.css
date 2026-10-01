@@ -180,6 +180,43 @@ body {
   border-color: #bae6fd;
 }
 
+/* 指導者用 マス数設定 */
+.teacher-grid-setting {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #f8fafc;
+  padding: 4px 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--grid-border);
+}
+
+.teacher-label {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.select-grid-size {
+  font-family: inherit;
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: var(--primary);
+  background: #ffffff;
+  border: 1.5px solid var(--primary-light);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.select-grid-size:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
+
 /* ==========================================================================
    ステータスバー（種別・進捗・タイマー）
    ========================================================================== */
@@ -261,7 +298,7 @@ body {
 
 .grid-container {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(var(--grid-cols, 6), 1fr);
   gap: 6px;
   background: #e2e8f0;
   padding: 8px;
@@ -306,6 +343,28 @@ body {
   box-shadow: inset -2px 0 0 rgba(0, 0, 0, 0.06);
 }
 
+/* 選択中マスに対応する行・列見出しのハイライト */
+.grid-cell.col-header.is-highlight {
+  background-color: #ea580c !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 0 2px #c2410c, 0 3px 8px rgba(234, 88, 12, 0.4) !important;
+  transform: scale(1.08);
+  z-index: 3;
+}
+
+.grid-cell.row-header.is-highlight {
+  background-color: #ca8a04 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 0 2px #a16207, 0 3px 8px rgba(202, 138, 4, 0.4) !important;
+  transform: scale(1.08);
+  z-index: 3;
+}
+
+.grid-container.is-size-10 .grid-cell.col-header.is-highlight,
+.grid-container.is-size-10 .grid-cell.row-header.is-highlight {
+  transform: scale(1.03);
+}
+
 /* 児童が解答を入力するマス */
 .grid-cell.answer-cell {
   background-color: var(--cell-bg);
@@ -347,6 +406,51 @@ body {
   }
 }
 
+/* --------------------------------------------------------------------------
+   10×10（またはマス数が多い場合）専用のスタイル調整
+   -------------------------------------------------------------------------- */
+.grid-section:has(.grid-container.is-size-10) {
+  max-width: 520px;
+}
+
+.grid-container.is-size-10 {
+  gap: 3px;
+  padding: 6px;
+}
+
+.grid-container.is-size-10 .grid-cell {
+  font-size: 0.95rem;
+  border-radius: 4px;
+}
+
+.grid-container.is-size-10 .grid-cell.op-cell {
+  font-size: 1.15rem;
+}
+
+.grid-container.is-size-10 .grid-cell.col-header,
+.grid-container.is-size-10 .grid-cell.row-header {
+  font-size: 1.05rem;
+}
+
+.grid-container.is-size-10 .grid-cell.answer-cell.is-active {
+  transform: scale(1.02);
+}
+
+/* 10×10見直しモード時の文字サイズ調整 */
+.grid-container.is-size-10 .cell-review-wrong {
+  font-size: 0.65rem;
+  line-height: 1;
+}
+
+.grid-container.is-size-10 .cell-review-correct-badge {
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.grid-container.is-size-10 .cell-review-right {
+  font-size: 0.95rem;
+}
+
 /* ==========================================================================
    入力・案内セクション（Phase 2: 手書き & テンキー & 修正）
    ========================================================================== */
@@ -361,6 +465,90 @@ body {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   width: 100%;
+}
+
+/* --------------------------------------------------------------------------
+   手元フォーカス式バナー（現在の問題 ＋ 次の問題を縦配置）
+   -------------------------------------------------------------------------- */
+.input-formula-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background: #ffffff;
+  border: 2px solid #bfdbfe;
+  border-radius: var(--radius-md);
+  padding: 8px 14px;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.08);
+}
+
+.current-formula-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.formula-badge {
+  background: var(--primary);
+  color: #ffffff;
+  font-size: 0.76rem;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 999px;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.formula-text {
+  font-size: 1.85rem;
+  font-weight: 900;
+  color: var(--text-main);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+}
+
+.formula-target {
+  color: var(--primary);
+  background: #eff6ff;
+  padding: 0 6px;
+  border-radius: 6px;
+  border-bottom: 3px solid var(--primary);
+  display: inline-block;
+  min-width: 26px;
+  text-align: center;
+}
+
+.formula-val-filled {
+  color: var(--primary);
+}
+
+.formula-wrong-note {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-left: 6px;
+}
+
+/* 下段: 次の問題（少し控えめに表示） */
+.next-formula-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px dashed #e2e8f0;
+  white-space: nowrap;
+}
+
+.next-badge {
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 800;
+}
+
+.next-text {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #64748b;
+  font-variant-numeric: tabular-nums;
 }
 
 /* モード切り替えタブ */
@@ -505,14 +693,51 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  gap: 4px;
   min-width: 36px;
-  height: 36px;
-  background: var(--primary);
-  color: #ffffff;
+  height: 38px;
+  padding: 2px 6px;
+  background: var(--primary-light);
+  color: var(--primary);
   border-radius: var(--radius-sm);
   font-size: 1.3rem;
   font-weight: 900;
-  box-shadow: var(--shadow-sm);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.06);
+}
+
+.recog-placeholder {
+  color: var(--text-muted);
+  font-size: 1.2rem;
+}
+
+/* 2桁以上の分割スロット */
+.recog-digit-slot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 26px;
+  height: 32px;
+  padding: 0 4px;
+  background: #ffffff;
+  border: 2px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 1.3rem;
+  font-weight: 900;
+  color: var(--primary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.recog-digit-slot:hover {
+  border-color: var(--primary);
+}
+
+.recog-digit-slot.is-active-digit {
+  border-color: var(--primary);
+  background: #2563eb;
+  color: #ffffff;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.35);
+  transform: scale(1.08);
 }
 
 .recog-sub {
@@ -531,7 +756,7 @@ body {
 
 .btn-correct {
   flex: 1;
-  min-width: 36px;
+  min-width: 34px;
   height: 42px;
   border: 2px solid #cbd5e1;
   background: #ffffff;
@@ -554,6 +779,19 @@ body {
   background: var(--primary-light);
   border-color: var(--primary);
   color: var(--primary);
+}
+
+.btn-correct.btn-correct-backspace {
+  background: #fef2f2;
+  color: #dc2626;
+  border-color: #fecaca;
+  font-size: 1.25rem;
+  flex: 1.1;
+}
+
+.btn-correct.btn-correct-backspace:active {
+  background: #fee2e2;
+  border-color: #f87171;
 }
 
 /* 大型テンキー */

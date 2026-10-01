@@ -39,6 +39,13 @@ class MathGridApp {
     // 指導者用設定UI
     this.selectGridSize = document.getElementById('select-grid-size');
 
+    // 手元フォーカス式バナー要素（現在の問題 ＋ 次の問題を縦配置）
+    this.inputFormulaText = document.getElementById('input-formula-text');
+    this.nextFormulaText = document.getElementById('next-formula-text');
+    this.nextFormulaBox = document.getElementById('next-formula-box');
+    this.btnCorrectBackspace = document.getElementById('btn-correct-backspace');
+    this.selectedDigitIndex = null; // 2桁修正時の選択中桁インデックス（0=十の位, 1=一の位）
+
     // Phase 2 入力要素キャッシュ
     this.tabHandwriting = document.getElementById('tab-handwriting');
     this.tabKeypad = document.getElementById('tab-keypad');
@@ -521,29 +528,67 @@ class MathGridApp {
   }
 
   /**
-   * 1タップ修正の適用（誤認識時）
+   * 1タップ修正の適用（誤認識時、2桁以上の桁単位訂正に対応）
    */
   applyCorrection(selectedNum) {
     if (this.isTestFinished) return;
     const { row, col } = this.activeCell;
     const detail = this.details[row][col];
+    const currentVal = String(this.answers[row][col] || '');
+
+    let newVal = String(selectedNum);
+
+    if (currentVal.length >= 2) {
+      // 2桁の場合：選択されている桁（デフォルトは一の位）を置き換える
+      const chars = currentVal.split('');
+      const targetIdx = (this.selectedDigitIndex !== null && this.selectedDigitIndex >= 0 && this.selectedDigitIndex < chars.length)
+        ? this.selectedDigitIndex
+        : (chars.length - 1); // 一の位
+
+      chars[targetIdx] = String(selectedNum);
+      newVal = chars.join('');
+    } else if (currentVal.length === 1 && this.selectedDigitIndex === null) {
+      // 1桁で通常置換
+      newVal = String(selectedNum);
+    }
 
     // 児童が修正したフラグを立てる
     detail.correctionUsed = true;
-    detail.studentAnswer = String(selectedNum);
+    detail.studentAnswer = newVal;
 
     // UI更新
-    this.setAnswer(row, col, String(selectedNum));
-    this.updateRecogBadge(String(selectedNum));
+    this.setAnswer(row, col, newVal);
+    this.updateRecogBadge(newVal);
     this.highlightCorrectionButton(String(selectedNum));
 
-    console.log(`[1タップ修正] マス(${row}, ${col}) 児童が修正: ${selectedNum} (元の認識: ${detail.recognizedAnswer})`);
+    console.log(`[1タップ修正] マス(${row}, ${col}) 児童が修正: ${newVal} (元の認識: ${detail.recognizedAnswer})`);
 
     // テンポよく解けるよう、修正後280msで自動的に次のマスへ進む
     if (this.autoAdvanceTimer) clearTimeout(this.autoAdvanceTimer);
     this.autoAdvanceTimer = setTimeout(() => {
       this.moveToNextCell();
     }, 280);
+  }
+
+  /**
+   * 修正バーの1文字消去（⌫）
+   */
+  handleCorrectionBackspace() {
+    if (this.isTestFinished) return;
+    const { row, col } = this.activeCell;
+    const detail = this.details[row][col];
+    const currentVal = String(this.answers[row][col] || '');
+
+    if (currentVal.length <= 1) {
+      this.clearCurrentCell();
+    } else {
+      // 2桁なら末尾の1文字を消して1桁にする
+      const newVal = currentVal.slice(0, -1);
+      detail.studentAnswer = newVal;
+      this.setAnswer(row, col, newVal);
+      this.selectedDigitIndex = 0;
+      this.updateRecogBadge(newVal);
+    }
   }
 
   /**
@@ -591,12 +636,54 @@ class MathGridApp {
   }
 
   /**
-   * 認識結果バッジの表示更新
+   * 認識結果バッジの表示更新（桁スロット対応）
    */
   updateRecogBadge(val) {
-    if (this.recogBadge) {
-      this.recogBadge.textContent = val !== '' && val !== null ? val : '-';
+    if (!this.recogBadge) return;
+
+    const str = (val !== '' && val !== null && val !== undefined) ? String(val) : '';
+    if (str === '' || str === '-') {
+      this.recogBadge.innerHTML = '<span class="recog-placeholder">-</span>';
+      this.selectedDigitIndex = null;
+      return;
     }
+
+    // 見直しモードなどのリッチHTMLの場合
+    if (str.includes('<span') || this.isTestFinished) {
+      this.recogBadge.innerHTML = str;
+      return;
+    }
+
+    // 1桁または2桁以上の数字をスロット化して描画
+    this.recogBadge.innerHTML = '';
+    const digits = str.split('');
+
+    if (this.selectedDigitIndex === null || this.selectedDigitIndex >= digits.length) {
+      this.selectedDigitIndex = digits.length - 1; // デフォルトは一の位
+    }
+
+    digits.forEach((d, idx) => {
+      const slot = document.createElement('span');
+      slot.className = 'recog-digit-slot';
+      if (idx === this.selectedDigitIndex) {
+        slot.classList.add('is-active-digit');
+      }
+      slot.textContent = d;
+      slot.setAttribute('data-digit-idx', idx);
+      slot.setAttribute('title', idx === 0 && digits.length === 2 ? '十の位（タップして変更）' : '一の位（タップして変更）');
+
+      // タップで修正対象の桁を切り替え
+      slot.addEventListener('pointerdown', (e) => {
+        e.stopPropagation();
+        this.selectedDigitIndex = idx;
+        this.recogBadge.querySelectorAll('.recog-digit-slot').forEach((s, i) => {
+          s.classList.toggle('is-active-digit', i === idx);
+        });
+        this.highlightCorrectionButton(digits[idx]);
+      });
+
+      this.recogBadge.appendChild(slot);
+    });
   }
 
   /**
@@ -700,6 +787,7 @@ class MathGridApp {
     }
 
     this.activeCell = { row, col };
+    this.selectedDigitIndex = null;
 
     // 新しいマスをアクティブ化
     const targetCell = this.getCellElement(row, col);
@@ -707,6 +795,12 @@ class MathGridApp {
       targetCell.classList.add('is-active');
       targetCell.focus({ preventScroll: true });
     }
+
+    // 行見出し・列見出しのハイライト更新
+    this.updateHeaderHighlights(row, col);
+
+    // 手元フォーカス式バナーの更新
+    this.updateInputFormulaBanner(row, col);
 
     // 画面下部の式表示を更新
     const rowNum = this.rowHeaders[row];
@@ -745,6 +839,76 @@ class MathGridApp {
     } else {
       this.updateRecogBadge(currentVal || '-');
       this.highlightCorrectionButton(currentVal);
+    }
+  }
+
+  /**
+   * 現在のアクティブマスに対応する行見出し・列見出しをハイライト
+   */
+  updateHeaderHighlights(row, col) {
+    if (!this.gridContainer) return;
+    const prevHighlights = this.gridContainer.querySelectorAll('.row-header.is-highlight, .col-header.is-highlight');
+    prevHighlights.forEach(el => el.classList.remove('is-highlight'));
+
+    if (row >= 0 && row < this.rows && col >= 0 && col < this.cols) {
+      const rowHeader = this.gridContainer.querySelector(`.row-header[data-row="${row}"]`);
+      const colHeader = this.gridContainer.querySelector(`.col-header[data-col="${col}"]`);
+      if (rowHeader) rowHeader.classList.add('is-highlight');
+      if (colHeader) colHeader.classList.add('is-highlight');
+    }
+  }
+
+  /**
+   * 手元フォーカス式バナーの表示更新（現在の式 ＋ 次の問題予告）
+   */
+  updateInputFormulaBanner(row, col) {
+    if (!this.inputFormulaText || !this.nextFormulaText) return;
+
+    if (row < 0 || row >= this.rows || col < 0 || col >= this.cols) {
+      this.inputFormulaText.innerHTML = '-';
+      this.nextFormulaText.textContent = '-';
+      return;
+    }
+
+    const rowNum = this.rowHeaders[row];
+    const colNum = this.colHeaders[col];
+    const detail = this.details[row][col];
+
+    if (this.isTestFinished) {
+      if (detail.isCorrect) {
+        this.inputFormulaText.innerHTML = `${rowNum} ＋ ${colNum} ＝ <strong class="text-success">${detail.correctAnswer}</strong> ⭕`;
+      } else {
+        const yourAns = (detail.studentAnswer !== null && detail.studentAnswer !== '') ? detail.studentAnswer : '未入力';
+        this.inputFormulaText.innerHTML = `${rowNum} ＋ ${colNum} ＝ <strong class="text-success">${detail.correctAnswer}</strong> <span class="formula-wrong-note">(あなたの答え: <del>${yourAns}</del>)</span>`;
+      }
+      if (this.nextFormulaBox) this.nextFormulaBox.style.display = 'none';
+      return;
+    }
+
+    if (this.nextFormulaBox) this.nextFormulaBox.style.display = 'flex';
+
+    // 解答中: 入力済みならその数値を、未入力なら「？」を表示
+    const currentVal = this.answers[row][col];
+    const targetHtml = (currentVal !== '' && currentVal !== null)
+      ? `<strong class="formula-val-filled">${currentVal}</strong>`
+      : `<span class="formula-target">？</span>`;
+
+    this.inputFormulaText.innerHTML = `${rowNum} ＋ ${colNum} ＝ ${targetHtml}`;
+
+    // つぎの問題の計算予告（右へ進み、行末なら次の行頭へ）
+    let nextRow = row;
+    let nextCol = col + 1;
+    if (nextCol >= this.cols) {
+      nextCol = 0;
+      nextRow++;
+    }
+
+    if (nextRow < this.rows) {
+      const nextRowNum = this.rowHeaders[nextRow];
+      const nextColNum = this.colHeaders[nextCol];
+      this.nextFormulaText.textContent = `${nextRowNum} ＋ ${nextColNum} ＝ □`;
+    } else {
+      this.nextFormulaText.textContent = 'ラスト！🏁';
     }
   }
 
@@ -802,6 +966,7 @@ class MathGridApp {
         cellEl.classList.remove('is-filled');
       }
     }
+    this.updateInputFormulaBanner(row, col);
     this.updateProgress();
   }
 
@@ -1536,13 +1701,20 @@ class MathGridApp {
       this.btnConfirmNext.addEventListener('click', () => this.moveToNextCell());
     }
 
-    // 1タップ修正バーのボタン群
+    // 1タップ修正バーのボタン群（数字タップまたは1文字消去）
     if (this.quickCorrectionBar) {
       this.quickCorrectionBar.addEventListener('click', (e) => {
         const btn = e.target.closest('.btn-correct');
         if (btn) {
+          const action = btn.getAttribute('data-action');
+          if (action === 'backspace') {
+            this.handleCorrectionBackspace();
+            return;
+          }
           const num = btn.getAttribute('data-num');
-          this.applyCorrection(num);
+          if (num !== null && num !== undefined) {
+            this.applyCorrection(num);
+          }
         }
       });
     }
