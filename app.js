@@ -11,7 +11,7 @@ class MathGridApp {
     this.gridSize = this.rows; // 既存コードとの互換性用
     this.totalCells = this.rows * this.cols;
 
-    this.operation = '+';
+    this.operation = localStorage.getItem('manabi_operation') || '+';
     this.rowHeaders = [];
     this.colHeaders = [];
     this.activeCell = { row: 0, col: 0 };
@@ -35,9 +35,11 @@ class MathGridApp {
     this.btnPrevCell = document.getElementById('btn-prev-cell');
     this.btnNextCell = document.getElementById('btn-next-cell');
     this.testTitleEl = document.getElementById('test-title');
+    this.testBadgeIcon = document.getElementById('test-badge-icon');
 
     // 指導者用設定UI
     this.selectGridSize = document.getElementById('select-grid-size');
+    this.selectOperation = document.getElementById('select-operation');
 
     // 手元フォーカス式バナー要素（現在の問題 ＋ 次の問題を縦配置）
     this.inputFormulaText = document.getElementById('input-formula-text');
@@ -105,10 +107,37 @@ class MathGridApp {
   }
 
   /**
+   * 演算子記号（全角表示用）
+   */
+  getOperationSymbol() {
+    if (this.operation === '-' || this.operation === '−') return '−';
+    if (this.operation === '*' || this.operation === '×') return '×';
+    return '＋';
+  }
+
+  /**
+   * 演算子ラベル
+   */
+  getOperationLabel() {
+    if (this.operation === '-' || this.operation === '−') return 'ひきざん';
+    if (this.operation === '*' || this.operation === '×') return 'かけざん';
+    return 'たしざん';
+  }
+
+  /**
+   * 演算子アイコン
+   */
+  getOperationIcon() {
+    if (this.operation === '-' || this.operation === '−') return '➖';
+    if (this.operation === '*' || this.operation === '×') return '✖️';
+    return '➕';
+  }
+
+  /**
    * 初期化
    */
   init() {
-    this.syncGridSizeUI();
+    this.syncSettingsUI();
     this.generateHeaders();
     this.initAnswers();
     this.renderGrid();
@@ -118,19 +147,48 @@ class MathGridApp {
     this.attachEventListeners();
     this.updateProgress();
     this.startTimer();
-    console.log(`MathGridApp initialized successfully (${this.rows}x${this.cols}, total: ${this.totalCells} cells).`);
+    console.log(`MathGridApp initialized successfully (${this.operation}, ${this.rows}x${this.cols}, total: ${this.totalCells} cells).`);
   }
 
   /**
    * 指導者設定UI（セレクト）とステータス表示の同期
    */
-  syncGridSizeUI() {
+  syncSettingsUI() {
     if (this.selectGridSize) {
       this.selectGridSize.value = `${this.rows}x${this.cols}`;
     }
-    if (this.testTitleEl) {
-      this.testTitleEl.textContent = `たしざん (${this.rows}×${this.cols} マス)`;
+    if (this.selectOperation) {
+      this.selectOperation.value = this.operation;
     }
+    if (this.testTitleEl) {
+      this.testTitleEl.textContent = `${this.getOperationLabel()} (${this.rows}×${this.cols} マス)`;
+    }
+    if (this.testBadgeIcon) {
+      this.testBadgeIcon.textContent = this.getOperationIcon();
+    }
+  }
+
+  /**
+   * 既存コード互換用
+   */
+  syncGridSizeUI() {
+    this.syncSettingsUI();
+  }
+
+  /**
+   * 指導者による演算子変更（問題開始前または設定時）
+   * @param {string} op '+' または '-'
+   */
+  setOperation(op) {
+    if (this.operation === op) return;
+    this.operation = op;
+    try {
+      localStorage.setItem('manabi_operation', op);
+    } catch (_) {}
+
+    this.syncSettingsUI();
+    this.restartTest();
+    console.log(`[指導者設定] 演算子を ${op} (${this.getOperationLabel()}) に変更しました。`);
   }
 
   /**
@@ -150,14 +208,14 @@ class MathGridApp {
       localStorage.setItem('manabi_grid_cols', String(cols));
     } catch (_) {}
 
-    this.syncGridSizeUI();
+    this.syncSettingsUI();
     this.restartTest();
     console.log(`[指導者設定] グリッドサイズを ${rows}x${cols} (${this.totalCells}問) に変更しました。`);
   }
 
   /**
-   * 数字（0〜9の標準数字群）をランダムに並べて見出しを生成
-   * 行数・列数に応じて柔軟にスライス
+   * 見出し数字の生成（足し算・引き算対応）
+   * 引き算時は答えが必ず0以上になるように生成
    */
   generateHeaders() {
     const shuffle = (array) => {
@@ -169,22 +227,58 @@ class MathGridApp {
       return arr;
     };
 
-    // 0〜9の10個の基本数字（100マス計算の標準数字）
-    const baseDigits = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
+    const isSub = (this.operation === '-' || this.operation === '−');
 
-    // 行ヘッダーの生成
-    let rPool = shuffle(baseDigits);
-    while (rPool.length < this.rows) {
-      rPool = rPool.concat(shuffle(baseDigits));
-    }
-    this.rowHeaders = rPool.slice(0, this.rows);
+    if (isSub) {
+      // 引き算: 1桁−1桁、2桁−1桁（答えは必ず0以上）
+      // 列ヘッダー（引く数）: 0〜9からシャッフル
+      const baseColDigits = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+      let cPool = shuffle(baseColDigits);
+      while (cPool.length < this.cols) {
+        cPool = cPool.concat(shuffle(baseColDigits));
+      }
+      this.colHeaders = cPool.slice(0, this.cols);
 
-    // 列ヘッダーの生成
-    let cPool = shuffle(baseDigits);
-    while (cPool.length < this.cols) {
-      cPool = cPool.concat(shuffle(baseDigits));
+      // 引く数の最大値
+      const maxCol = Math.max(...this.colHeaders);
+
+      // 行ヘッダー（引かれる数）: 必ず maxCol 以上にして答えを0以上にする
+      if (this.rows >= 10) {
+        // 10x10の場合: 9〜18の10個の数字をシャッフル
+        const baseRowDigits = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
+        let rPool = shuffle(baseRowDigits);
+        while (rPool.length < this.rows) {
+          rPool = rPool.concat(shuffle(baseRowDigits));
+        }
+        this.rowHeaders = rPool.slice(0, this.rows);
+      } else {
+        // 5x5等の場合: maxCol から始まる数字群（例: maxCol=7なら 7, 8, 9, 11, 14 等）
+        // 1桁−1桁と2桁−1桁が両方出現するように生成
+        const rowCandidates = [];
+        for (let offset of [0, 1, 2, 4, 7]) {
+          rowCandidates.push(maxCol + offset);
+        }
+        let rPool = shuffle(rowCandidates);
+        this.rowHeaders = rPool.slice(0, this.rows);
+      }
+    } else {
+      // 足し算: 0〜9の基本数字
+      const baseDigits = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
+
+      // 行ヘッダーの生成
+      let rPool = shuffle(baseDigits);
+      while (rPool.length < this.rows) {
+        rPool = rPool.concat(shuffle(baseDigits));
+      }
+      this.rowHeaders = rPool.slice(0, this.rows);
+
+      // 列ヘッダーの生成
+      let cPool = shuffle(baseDigits);
+      while (cPool.length < this.cols) {
+        cPool = cPool.concat(shuffle(baseDigits));
+      }
+      this.colHeaders = cPool.slice(0, this.cols);
     }
-    this.colHeaders = cPool.slice(0, this.cols);
   }
 
   /**
@@ -195,17 +289,21 @@ class MathGridApp {
       Array.from({ length: this.cols }, () => '')
     );
 
-    // 指針に基づくResultDetailの初期化
+    const isSub = (this.operation === '-' || this.operation === '−');
+
+    // ResultDetailの初期化
     this.details = Array.from({ length: this.rows }, (_, r) =>
       Array.from({ length: this.cols }, (_, c) => {
         const rowNum = this.rowHeaders[r];
         const colNum = this.colHeaders[c];
+        const correctAnswer = isSub ? (rowNum - colNum) : (rowNum + colNum);
+
         return {
           index: r * this.cols + c,
           rowNum,
           colNum,
           operation: this.operation,
-          correctAnswer: rowNum + colNum,
+          correctAnswer,
           recognizedAnswer: null, // 認識エンジンが最初に認識した値
           studentAnswer: null,    // 児童が確定した値
           isCorrect: false,
@@ -236,7 +334,7 @@ class MathGridApp {
     // (0, 0) 演算子マス
     const opCell = document.createElement('div');
     opCell.className = 'grid-cell op-cell';
-    opCell.textContent = this.operation;
+    opCell.textContent = this.getOperationSymbol();
     this.gridContainer.appendChild(opCell);
 
     // (0, 1..cols) 列見出しマス
@@ -592,7 +690,7 @@ class MathGridApp {
   }
 
   /**
-   * 大型テンキーからの直接入力
+   * 大型テンキーからの直接入力（スマート自動送り対応）
    */
   handleKeypadInput(key) {
     if (this.isTestFinished) return;
@@ -613,7 +711,7 @@ class MathGridApp {
     const currentVal = String(this.answers[row][col] || '');
     let newVal = key;
 
-    // 2桁入力のサポート（例: 1を押した後に5で15）
+    // 2桁入力のサポート（1文字入力済みの状態で次の数字が来たら連結）
     if (currentVal !== '' && currentVal.length === 1) {
       newVal = currentVal + key;
     }
@@ -626,13 +724,23 @@ class MathGridApp {
     this.updateRecogBadge(newVal);
     this.highlightCorrectionButton(newVal.length === 1 ? newVal : null);
 
-    // 2桁入力または一巡で自動送り
-    if (newVal.length >= 2 || parseInt(newVal, 10) >= 10) {
-      if (this.autoAdvanceTimer) clearTimeout(this.autoAdvanceTimer);
+    // スマート自動送り判定（正答の桁数基準）
+    if (this.autoAdvanceTimer) clearTimeout(this.autoAdvanceTimer);
+
+    // 正答の必要桁数（1桁なら1、2桁なら2）
+    const targetDigits = String(Math.abs(detail.correctAnswer)).length;
+
+    // 1. 入力桁数が正答桁数に達した、または2桁入力された場合：
+    //    140ms後に次の問題へ進む！
+    if (newVal.length >= targetDigits || newVal.length >= 2) {
       this.autoAdvanceTimer = setTimeout(() => {
         this.moveToNextCell();
-      }, 200);
+      }, 140);
+      return;
     }
+
+    // 2. 正答が2桁でまだ1桁目（例: 12の「1」）しか入力されていない場合：
+    //    タイムアウト（時間）による自動送りは行わず、2桁目の入力を何秒でも待機する。
   }
 
   /**
@@ -806,16 +914,17 @@ class MathGridApp {
     const rowNum = this.rowHeaders[row];
     const colNum = this.colHeaders[col];
     const detail = this.details[row][col];
+    const opSymbol = this.getOperationSymbol();
 
     if (this.isTestFinished) {
       if (detail.isCorrect) {
-        this.calcFormulaEl.innerHTML = `<span>${rowNum} ＋ ${colNum} ＝ <strong>${detail.correctAnswer}</strong></span> <span class="review-status-pill pill-correct">⭕ せいかい！</span>`;
+        this.calcFormulaEl.innerHTML = `<span>${rowNum} ${opSymbol} ${colNum} ＝ <strong>${detail.correctAnswer}</strong></span> <span class="review-status-pill pill-correct">⭕ せいかい！</span>`;
       } else {
         const yourAns = (detail.studentAnswer !== null && detail.studentAnswer !== '') ? detail.studentAnswer : '未入力';
-        this.calcFormulaEl.innerHTML = `<span>${rowNum} ＋ ${colNum} ＝ <strong class="text-success-bold">${detail.correctAnswer}</strong></span> <span class="review-status-pill pill-wrong">あなたの答え: <del>${yourAns}</del> ❌</span>`;
+        this.calcFormulaEl.innerHTML = `<span>${rowNum} ${opSymbol} ${colNum} ＝ <strong class="text-success-bold">${detail.correctAnswer}</strong></span> <span class="review-status-pill pill-wrong">あなたの答え: <del>${yourAns}</del> ❌</span>`;
       }
     } else {
-      this.calcFormulaEl.textContent = `${rowNum} ＋ ${colNum} ＝ ？`;
+      this.calcFormulaEl.textContent = `${rowNum} ${opSymbol} ${colNum} ＝ ？`;
     }
 
     // マスに保存されているストロークや回答の復元
@@ -873,13 +982,14 @@ class MathGridApp {
     const rowNum = this.rowHeaders[row];
     const colNum = this.colHeaders[col];
     const detail = this.details[row][col];
+    const opSymbol = this.getOperationSymbol();
 
     if (this.isTestFinished) {
       if (detail.isCorrect) {
-        this.inputFormulaText.innerHTML = `${rowNum} ＋ ${colNum} ＝ <strong class="text-success">${detail.correctAnswer}</strong> ⭕`;
+        this.inputFormulaText.innerHTML = `${rowNum} ${opSymbol} ${colNum} ＝ <strong class="text-success">${detail.correctAnswer}</strong> ⭕`;
       } else {
         const yourAns = (detail.studentAnswer !== null && detail.studentAnswer !== '') ? detail.studentAnswer : '未入力';
-        this.inputFormulaText.innerHTML = `${rowNum} ＋ ${colNum} ＝ <strong class="text-success">${detail.correctAnswer}</strong> <span class="formula-wrong-note">(あなたの答え: <del>${yourAns}</del>)</span>`;
+        this.inputFormulaText.innerHTML = `${rowNum} ${opSymbol} ${colNum} ＝ <strong class="text-success">${detail.correctAnswer}</strong> <span class="formula-wrong-note">(あなたの答え: <del>${yourAns}</del>)</span>`;
       }
       if (this.nextFormulaBox) this.nextFormulaBox.style.display = 'none';
       return;
@@ -893,7 +1003,7 @@ class MathGridApp {
       ? `<strong class="formula-val-filled">${currentVal}</strong>`
       : `<span class="formula-target">？</span>`;
 
-    this.inputFormulaText.innerHTML = `${rowNum} ＋ ${colNum} ＝ ${targetHtml}`;
+    this.inputFormulaText.innerHTML = `${rowNum} ${opSymbol} ${colNum} ＝ ${targetHtml}`;
 
     // つぎの問題の計算予告（右へ進み、行末なら次の行頭へ）
     let nextRow = row;
@@ -906,7 +1016,7 @@ class MathGridApp {
     if (nextRow < this.rows) {
       const nextRowNum = this.rowHeaders[nextRow];
       const nextColNum = this.colHeaders[nextCol];
-      this.nextFormulaText.textContent = `${nextRowNum} ＋ ${nextColNum} ＝ □`;
+      this.nextFormulaText.textContent = `${nextRowNum} ${opSymbol} ${nextColNum} ＝ □`;
     } else {
       this.nextFormulaText.textContent = 'ラスト！🏁';
     }
@@ -1094,12 +1204,14 @@ class MathGridApp {
     const history = this.getHistory();
     const currentGridLabel = `${this.rows}×${this.cols}`;
 
-    // ★重要: 5x5と10x10の記録を混同しないよう、同じグリッドサイズの記録のみを抽出して比較
-    const sameSizeHistory = history.filter(rec =>
-      rec.gridLabel === currentGridLabel ||
-      (rec.rows === this.rows && rec.cols === this.cols) ||
-      (!rec.rows && this.rows === 5 && rec.gridSize === 5)
-    );
+    // ★重要: グリッドサイズと演算子（たしざん/ひきざん）を混同しないよう、同じ設定の記録のみを抽出して比較
+    const sameSizeHistory = history.filter(rec => {
+      const matchGrid = rec.gridLabel === currentGridLabel ||
+        (rec.rows === this.rows && rec.cols === this.cols) ||
+        (!rec.rows && this.rows === 5 && rec.gridSize === 5);
+      const matchOp = (rec.operation === this.operation) || (!rec.operation && this.operation === '+');
+      return matchGrid && matchOp;
+    });
 
     const prevRecord = sameSizeHistory.length > 0 ? sameSizeHistory[0] : null;
     const bestRecord = this.getBestRecord(sameSizeHistory);
@@ -1467,32 +1579,35 @@ class MathGridApp {
   renderHistoryList() {
     const history = this.getHistory();
     const currentGridLabel = `${this.rows}×${this.cols}`;
+    const currentOpLabel = this.getOperationLabel();
 
-    // 現在選択中のグリッドサイズの自己ベストを抽出
-    const currentSizeHistory = history.filter(rec =>
-      rec.gridLabel === currentGridLabel ||
-      (rec.rows === this.rows && rec.cols === this.cols) ||
-      (!rec.rows && this.rows === 5 && rec.gridSize === 5)
-    );
-    const best = this.getBestRecord(currentSizeHistory);
+    // 現在選択中のグリッドサイズ & 演算子の自己ベストを抽出
+    const currentSettingHistory = history.filter(rec => {
+      const matchGrid = rec.gridLabel === currentGridLabel ||
+        (rec.rows === this.rows && rec.cols === this.cols) ||
+        (!rec.rows && this.rows === 5 && rec.gridSize === 5);
+      const matchOp = (rec.operation === this.operation) || (!rec.operation && this.operation === '+');
+      return matchGrid && matchOp;
+    });
+    const best = this.getBestRecord(currentSettingHistory);
 
     // 自己ベストカードの描画
     if (this.bestRecordStats) {
       if (best) {
         this.bestRecordStats.innerHTML = `
           <div class="best-stat-item">
-            <span class="best-stat-lbl">${currentGridLabel} 最高正とう率</span>
+            <span class="best-stat-lbl">${currentGridLabel} ${currentOpLabel} 最高正とう率</span>
             <strong class="best-stat-val text-success">${best.accuracyRate}%</strong>
             <span class="best-stat-sub">(${best.correctCount}/${best.totalQuestions} 問)</span>
           </div>
           <div class="best-stat-item">
-            <span class="best-stat-lbl">${currentGridLabel} 最速タイム</span>
+            <span class="best-stat-lbl">${currentGridLabel} ${currentOpLabel} 最速タイム</span>
             <strong class="best-stat-val text-primary">${best.timeFormatted}</strong>
             <span class="best-stat-sub">${best.date}</span>
           </div>
         `;
       } else {
-        this.bestRecordStats.innerHTML = `<span class="text-muted">まだ ${currentGridLabel} の記録がありません</span>`;
+        this.bestRecordStats.innerHTML = `<span class="text-muted">まだ ${currentGridLabel} ${currentOpLabel} の記録がありません</span>`;
       }
     }
 
@@ -1508,11 +1623,12 @@ class MathGridApp {
         this.historyListItems.innerHTML = history.map((rec) => {
           const isBest = best && rec.id === best.id;
           const isPerfect = rec.accuracyRate === 100;
+          const opName = rec.operation === '-' ? 'ひきざん' : 'たしざん';
           return `
             <div class="history-row ${isBest ? 'is-best-row' : ''}">
               <div class="history-col-info">
                 <span class="h-date">${rec.date}</span>
-                <span class="h-mode">${rec.gridLabel} たしざん</span>
+                <span class="h-mode">${rec.gridLabel} ${opName}</span>
                 ${isBest ? '<span class="h-badge-best">🏆 ベスト</span>' : ''}
               </div>
               <div class="history-col-score">
@@ -1737,6 +1853,10 @@ class MathGridApp {
         this.tabKeypad.classList.remove('is-active');
         this.handwritingPanel.classList.add('is-active');
         this.keypadPanel.classList.remove('is-active');
+        this.initCanvas();
+        if (this.currentStrokes && this.currentStrokes.length > 0) {
+          this.redrawStrokes(this.currentStrokes);
+        }
       });
 
       this.tabKeypad.addEventListener('click', () => {
@@ -1813,6 +1933,13 @@ class MathGridApp {
         if (r && c) {
           this.setGridDimensions(r, c);
         }
+      });
+    }
+
+    // 指導者用演算子変更（＋ たしざん / − ひきざん）
+    if (this.selectOperation) {
+      this.selectOperation.addEventListener('change', () => {
+        this.setOperation(this.selectOperation.value);
       });
     }
 

@@ -25,8 +25,13 @@
       </div>
       <div class="header-right">
         <!-- 指導者用設定コントロール（問題開始前設定） -->
-        <div class="teacher-grid-setting" title="指導者用：マス数設定">
-          <label for="select-grid-size" class="teacher-label">⚙️ マス数:</label>
+        <div class="teacher-grid-setting" title="指導者用：設定">
+          <label for="select-operation" class="teacher-label">種類:</label>
+          <select id="select-operation" class="select-grid-size select-operation" aria-label="問題種類設定">
+            <option value="+">➕ たしざん</option>
+            <option value="-">➖ ひきざん</option>
+          </select>
+          <label for="select-grid-size" class="teacher-label">マス数:</label>
           <select id="select-grid-size" class="select-grid-size" aria-label="問題マス数設定">
             <option value="5x5">5×5 (25問)</option>
             <option value="10x10">10×10 (100問)</option>
@@ -45,7 +50,7 @@
       <!-- 問題ステータスバー -->
       <section class="status-bar">
         <div class="status-badge mode-badge">
-          <span class="badge-icon">➕</span>
+          <span class="badge-icon" id="test-badge-icon">➕</span>
           <span class="badge-text" id="test-title">たしざん (5×5 マス)</span>
         </div>
         <div class="status-counter">
@@ -90,14 +95,32 @@
             </div>
           </div>
 
-          <!-- 入力モード切り替えタブ -->
+          <!-- 入力モード切り替えタブ（数字ボタン入力を基本に） -->
           <div class="mode-tabs">
-            <button id="tab-handwriting" class="tab-btn is-active" aria-label="手書きモード">✏️ てがき</button>
-            <button id="tab-keypad" class="tab-btn" aria-label="大型テンキーモード">🔢 おおきなテンキー</button>
+            <button id="tab-keypad" class="tab-btn is-active" aria-label="数字ボタンモード">🔢 すうじボタン</button>
+            <button id="tab-handwriting" class="tab-btn" aria-label="手書きモード">✏️ てがき入力</button>
           </div>
 
-          <!-- 手書きパネル -->
-          <div id="handwriting-panel" class="input-panel is-active">
+          <!-- 大型テンキーパネル（デフォルト基本入力モード） -->
+          <div id="keypad-panel" class="input-panel is-active">
+            <div class="keypad-grid">
+              <button class="btn-key" data-key="1">1</button>
+              <button class="btn-key" data-key="2">2</button>
+              <button class="btn-key" data-key="3">3</button>
+              <button class="btn-key" data-key="4">4</button>
+              <button class="btn-key" data-key="5">5</button>
+              <button class="btn-key" data-key="6">6</button>
+              <button class="btn-key" data-key="7">7</button>
+              <button class="btn-key" data-key="8">8</button>
+              <button class="btn-key" data-key="9">9</button>
+              <button class="btn-key btn-key-op" id="btn-keypad-clear" data-key="clear" title="1文字消す">⌫ けす</button>
+              <button class="btn-key" data-key="0">0</button>
+              <button class="btn-key btn-key-enter" id="btn-keypad-enter" data-key="enter" title="次の問題へ">つぎへ ➔</button>
+            </div>
+          </div>
+
+          <!-- 手書きパネル（切り替え可能サブモード） -->
+          <div id="handwriting-panel" class="input-panel">
             <div class="canvas-wrapper">
               <canvas id="draw-canvas" width="460" height="200" aria-label="数字の手書きエリア"></canvas>
               <div class="canvas-watermark">ここに すうじ を かいてね</div>
@@ -128,24 +151,6 @@
                 <button class="btn-correct" data-num="9">9</button>
                 <button class="btn-correct btn-correct-backspace" id="btn-correct-backspace" data-action="backspace" title="1文字消す">⌫</button>
               </div>
-            </div>
-          </div>
-
-          <!-- 大型テンキーパネル -->
-          <div id="keypad-panel" class="input-panel">
-            <div class="keypad-grid">
-              <button class="btn-key" data-key="1">1</button>
-              <button class="btn-key" data-key="2">2</button>
-              <button class="btn-key" data-key="3">3</button>
-              <button class="btn-key" data-key="4">4</button>
-              <button class="btn-key" data-key="5">5</button>
-              <button class="btn-key" data-key="6">6</button>
-              <button class="btn-key" data-key="7">7</button>
-              <button class="btn-key" data-key="8">8</button>
-              <button class="btn-key" data-key="9">9</button>
-              <button class="btn-key btn-key-op" id="btn-keypad-clear" data-key="clear">⌫ けす</button>
-              <button class="btn-key" data-key="0">0</button>
-              <button class="btn-key btn-key-enter" id="btn-keypad-enter" data-key="enter">つぎへ ➔</button>
             </div>
           </div>
         </section>
