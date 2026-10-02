@@ -214,7 +214,7 @@ class MathGridApp {
   }
 
   /**
-   * 見出し数字の生成（足し算・引き算対応）
+   * 見出し数字の生成（足し算・引き算・掛け算対応）
    * 引き算時は答えが必ず0以上になるように生成
    */
   generateHeaders() {
@@ -228,6 +228,7 @@ class MathGridApp {
     };
 
     const isSub = (this.operation === '-' || this.operation === '−');
+    const isMul = (this.operation === '*' || this.operation === '×');
 
     if (isSub) {
       // 引き算: 1桁−1桁、2桁−1桁（答えは必ず0以上）
@@ -261,6 +262,23 @@ class MathGridApp {
         let rPool = shuffle(rowCandidates);
         this.rowHeaders = rPool.slice(0, this.rows);
       }
+    } else if (isMul) {
+      // 掛け算: 1桁 × 1桁（九九の範囲）
+      const baseDigits = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
+
+      // 行ヘッダーの生成
+      let rPool = shuffle(baseDigits);
+      while (rPool.length < this.rows) {
+        rPool = rPool.concat(shuffle(baseDigits));
+      }
+      this.rowHeaders = rPool.slice(0, this.rows);
+
+      // 列ヘッダーの生成
+      let cPool = shuffle(baseDigits);
+      while (cPool.length < this.cols) {
+        cPool = cPool.concat(shuffle(baseDigits));
+      }
+      this.colHeaders = cPool.slice(0, this.cols);
     } else {
       // 足し算: 0〜9の基本数字
       const baseDigits = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
@@ -290,13 +308,21 @@ class MathGridApp {
     );
 
     const isSub = (this.operation === '-' || this.operation === '−');
+    const isMul = (this.operation === '*' || this.operation === '×');
 
     // ResultDetailの初期化
     this.details = Array.from({ length: this.rows }, (_, r) =>
       Array.from({ length: this.cols }, (_, c) => {
         const rowNum = this.rowHeaders[r];
         const colNum = this.colHeaders[c];
-        const correctAnswer = isSub ? (rowNum - colNum) : (rowNum + colNum);
+        let correctAnswer;
+        if (isSub) {
+          correctAnswer = rowNum - colNum;
+        } else if (isMul) {
+          correctAnswer = rowNum * colNum;
+        } else {
+          correctAnswer = rowNum + colNum;
+        }
 
         return {
           index: r * this.cols + c,
@@ -1030,7 +1056,7 @@ class MathGridApp {
   }
 
   /**
-   * 次のマスへ移動（右へ、行末なら次の行の先頭へ）
+   * 次のマスへ移動（右へ、行末なら次の行の先頭へ、最終問完了なら採点結果へ）
    */
   moveToNextCell() {
     let { row, col } = this.activeCell;
@@ -1040,7 +1066,10 @@ class MathGridApp {
       row++;
     }
     if (row >= this.rows) {
-      console.log('すべてのマスに到達しました');
+      // 最終問題の入力が完了して次のマスへ進もうとした場合：テスト終了・採点へ！
+      if (!this.isTestFinished) {
+        this.finishTest();
+      }
       return;
     }
     this.setActiveCell(row, col);
@@ -1081,7 +1110,7 @@ class MathGridApp {
   }
 
   /**
-   * 進捗状況（入力済みマス数）の更新 & 全問回答時の自動採点トリガー
+   * 進捗状況（入力済みマス数）の表示更新
    */
   updateProgress() {
     let filledCount = 0;
@@ -1094,13 +1123,6 @@ class MathGridApp {
     }
     if (this.progressCountEl) {
       this.progressCountEl.textContent = filledCount;
-    }
-
-    // 全マス埋まったら自動で採点・結果表示へ
-    if (filledCount === this.totalCells && !this.isTestFinished) {
-      setTimeout(() => {
-        this.finishTest();
-      }, 450);
     }
   }
 
@@ -1623,7 +1645,9 @@ class MathGridApp {
         this.historyListItems.innerHTML = history.map((rec) => {
           const isBest = best && rec.id === best.id;
           const isPerfect = rec.accuracyRate === 100;
-          const opName = rec.operation === '-' ? 'ひきざん' : 'たしざん';
+          const opName = (rec.operation === '-' || rec.operation === '−')
+            ? 'ひきざん'
+            : ((rec.operation === '*' || rec.operation === '×') ? 'かけざん' : 'たしざん');
           return `
             <div class="history-row ${isBest ? 'is-best-row' : ''}">
               <div class="history-col-info">
