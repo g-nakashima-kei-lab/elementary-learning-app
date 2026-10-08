@@ -1,7 +1,35 @@
 /**
- * まなびノート - 小学校向け学習アプリ
- * Phase 2: 手書きCanvas（Pointer Events）＋ 数字認識 ＋ 1タップ修正 ＋ 大型テンキー
+ * 文字列から決定論的な 32-bit 整数シードを生成する (FNV-1a 32-bit アルゴリズム)
+ * （文字列内容が同一であれば、すべてのブラウザ・端末で完全に同じ整数値を返す）
+ * @param {string} str 
+ * @returns {number} 32-bit 符号なし整数
  */
+function hashStringToSeed(str) {
+  let hash = 2166136261 >>> 0;
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i);
+    hash = Math.imul(hash, 16777619) >>> 0;
+  }
+  return hash >>> 0;
+}
+
+/**
+ * 32-bit Mulberry32 疑似乱数生成器
+ * シード値から 0 以上 1 未満の決定論的な乱数を生成する
+ * （同じシード値からはブラウザ・端末問わず完全に同じ乱数列が生成される）
+ * @param {number} seed 整数シード値
+ * @returns {function(): number}
+ */
+function createMulberry32Prng(seed) {
+  let s = Math.floor(seed) >>> 0;
+  return function() {
+    s |= 0;
+    s = (s + 0x6D2B79F5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
 
 class MathGridApp {
   constructor() {
@@ -17,6 +45,11 @@ class MathGridApp {
     this.activeCell = { row: 0, col: 0 };
     this.answers = []; // rows x cols 2D配列 (表示用)
     this.details = []; // rows x cols 2D配列 (ResultDetail構造)
+
+    // 出題順序設定（'random' = 一人ひとりランダム, 'shared' = クラス共通/みんな同じ）
+    this.problemOrder = localStorage.getItem('manabi_problem_order') || 'random';
+    // 問題セット番号（例: '1018-1', '1018-2', '1019-1' など MMDD-連番形式）
+    this.problemSet = localStorage.getItem('manabi_problem_set') || this.getDefaultProblemSet();
 
     // ストローク認識エンジン
     this.recognizer = new StrokeRecognizer();
@@ -40,13 +73,25 @@ class MathGridApp {
     // 指導者用設定UI
     this.selectGridSize = document.getElementById('select-grid-size');
     this.selectOperation = document.getElementById('select-operation');
+    this.selectLangMode = document.getElementById('select-lang-mode');
+    this.selectProblemOrder = document.getElementById('select-problem-order');
+    this.inputProblemSet = document.getElementById('input-problem-set') || document.getElementById('select-problem-set');
+    this.btnOpenSettings = document.getElementById('btn-open-settings');
+    this.btnCloseSettings = document.getElementById('btn-close-settings');
+    this.btnCloseSettingsX = document.getElementById('btn-close-settings-x');
+    this.settingsModal = document.getElementById('settings-modal');
+    this.langMode = localStorage.getItem('manabi_lang_mode') || 'kanji'; // 'kanji' (ふつう) / 'hiragana' (ひらがな)
 
-    // 手元フォーカス式バナー要素（現在の問題 ＋ 次の問題を縦配置）
+    // 手元フォーカス式バナー要素（現在の問題 ＋ 次の問題を縦配置 ＋ おわり案内）
     this.inputFormulaText = document.getElementById('input-formula-text');
     this.nextFormulaText = document.getElementById('next-formula-text');
     this.nextFormulaBox = document.getElementById('next-formula-box');
+    this.finalFinishBox = document.getElementById('final-finish-box');
+    this.btnFinalFinish = document.getElementById('btn-final-finish');
+    this.lblFinalMsg = document.getElementById('lbl-final-msg');
     this.btnCorrectBackspace = document.getElementById('btn-correct-backspace');
     this.selectedDigitIndex = null; // 2桁修正時の選択中桁インデックス（0=十の位, 1=一の位）
+    this.isReadyToFinish = false;   // 全問回答完了・見直し待機フラグ
 
     // Phase 2 入力要素キャッシュ
     this.tabHandwriting = document.getElementById('tab-handwriting');
@@ -107,6 +152,29 @@ class MathGridApp {
   }
 
   /**
+   * 現在の日本の学校年度（4月1日〜翌年3月31日）を取得
+   * 例: 2026/4/1〜2027/3/31 -> 2026, 2026/1/15 -> 2025
+   * @param {Date} [date] 基準日（デフォルトは現在日時）
+   * @returns {number} 学校年度（西暦年）
+   */
+  getSchoolYear(date = new Date()) {
+    const year = date.getFullYear();
+    const month = date.getMonth() + 1; // 1〜12
+    return month >= 4 ? year : year - 1;
+  }
+
+  /**
+   * デフォルトの問題セット番号（MMDD-1形式）を生成
+   * @param {Date} [date] 基準日（デフォルトは現在日時）
+   * @returns {string} 例: "1018-1"
+   */
+  getDefaultProblemSet(date = new Date()) {
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    return `${m}${d}-1`;
+  }
+
+  /**
    * 演算子記号（全角表示用）
    */
   getOperationSymbol() {
@@ -137,6 +205,7 @@ class MathGridApp {
    * 初期化
    */
   init() {
+    this.applyLanguageMode();
     this.syncSettingsUI();
     this.generateHeaders();
     this.initAnswers();
@@ -147,7 +216,7 @@ class MathGridApp {
     this.attachEventListeners();
     this.updateProgress();
     this.startTimer();
-    console.log(`MathGridApp initialized successfully (${this.operation}, ${this.rows}x${this.cols}, total: ${this.totalCells} cells).`);
+    console.log(`MathGridApp initialized successfully (${this.operation}, ${this.rows}x${this.cols}, total: ${this.totalCells} cells, lang: ${this.langMode}, set: ${this.problemSet}, SY: ${this.getSchoolYear()}年度).`);
   }
 
   /**
@@ -160,11 +229,185 @@ class MathGridApp {
     if (this.selectOperation) {
       this.selectOperation.value = this.operation;
     }
+    if (this.selectLangMode) {
+      this.selectLangMode.value = this.langMode;
+    }
+    if (this.selectProblemOrder) {
+      this.selectProblemOrder.value = this.problemOrder;
+    }
+    if (this.inputProblemSet) {
+      this.inputProblemSet.value = this.problemSet;
+    }
+    const isHira = (this.langMode === 'hiragana');
+    const unitText = isHira ? 'ます' : 'マス';
     if (this.testTitleEl) {
-      this.testTitleEl.textContent = `${this.getOperationLabel()} (${this.rows}×${this.cols} マス)`;
+      const orderLabel = (this.problemOrder === 'shared') 
+        ? ` [${this.problemSet}]` 
+        : '';
+      this.testTitleEl.textContent = `${this.getOperationLabel()} (${this.rows}×${this.cols} ${unitText})${orderLabel}`;
     }
     if (this.testBadgeIcon) {
       this.testBadgeIcon.textContent = this.getOperationIcon();
+    }
+  }
+
+  /**
+   * 出題順序（ひとりずつランダム / クラス共通）の変更
+   * @param {string} order 'random' または 'shared'
+   */
+  setProblemOrder(order) {
+    if (this.problemOrder === order) return;
+    this.problemOrder = order;
+    try {
+      localStorage.setItem('manabi_problem_order', order);
+    } catch (_) {}
+
+    this.syncSettingsUI();
+    this.restartTest();
+    console.log(`[指導者設定] 出題方法を ${order} に変更しました。`);
+  }
+
+  /**
+   * 問題セット番号（例: '1018-1', '1018-2', '1019-1'）の変更
+   * @param {string} setVal セット識別文字列
+   */
+  setProblemSet(setVal) {
+    const val = String(setVal || '').trim();
+    if (!val || this.problemSet === val) return;
+    this.problemSet = val;
+    try {
+      localStorage.setItem('manabi_problem_set', val);
+    } catch (_) {}
+
+    this.syncSettingsUI();
+    if (this.problemOrder === 'shared') {
+      this.restartTest();
+    }
+    console.log(`[指導者設定] 問題セット番号を [${val}] に変更しました。`);
+  }
+
+  /**
+   * 表示モード（ふつう / ひらがな）の変更
+   * @param {string} mode 'kanji' または 'hiragana'
+   */
+  setLanguageMode(mode) {
+    if (this.langMode === mode) return;
+    this.langMode = mode;
+    try {
+      localStorage.setItem('manabi_lang_mode', mode);
+    } catch (_) {}
+
+    this.applyLanguageMode();
+    this.syncSettingsUI();
+    this.updateInputFormulaBanner(this.activeCell.row, this.activeCell.col);
+    this.updateProgress();
+    console.log(`[指導者設定] 表示モードを ${mode} に変更しました。`);
+  }
+
+  /**
+   * 表示モードに応じた画面テキストの適用
+   */
+  applyLanguageMode() {
+    const isHira = (this.langMode === 'hiragana');
+    document.body.classList.toggle('is-hiragana-mode', isHira);
+
+    // 指導者設定ラベル & 設定モーダル
+    const btnOpenSet = document.getElementById('btn-open-settings');
+    if (btnOpenSet) btnOpenSet.textContent = isHira ? '⚙️ せってい' : '⚙️ せってい';
+    const settingsTitle = document.getElementById('settings-title');
+    if (settingsTitle) settingsTitle.textContent = isHira ? 'せんせい向け せってい' : '先生向け設定';
+    const lblSetIntro = document.getElementById('lbl-settings-intro');
+    if (lblSetIntro) lblSetIntro.textContent = isHira 
+      ? 'じゅぎょうや がくしゅうの ないように あわせて、けいさんの しゅるいや マスの かずを せっていできます。'
+      : '授業や学習内容に合わせて、計算の種類やマス数を設定できます。';
+    const lblSetOp = document.getElementById('lbl-set-op');
+    if (lblSetOp) lblSetOp.textContent = isHira ? 'けいさんの しゅるい' : '計算の種類';
+    const lblSetGrid = document.getElementById('lbl-set-grid');
+    if (lblSetGrid) lblSetGrid.textContent = isHira ? 'マスの かず' : 'マス数';
+    const lblSetLang = document.getElementById('lbl-set-lang');
+    if (lblSetLang) lblSetLang.textContent = isHira ? 'ひょうじ' : '表示';
+    const lblSetOrder = document.getElementById('lbl-set-order');
+    if (lblSetOrder) lblSetOrder.textContent = isHira ? 'もんだいの だしかた' : '問題の出し方';
+    const lblSetNumber = document.getElementById('lbl-set-number');
+    if (lblSetNumber) lblSetNumber.textContent = isHira ? 'もんだいセット' : '問題セット';
+    if (this.btnCloseSettings) this.btnCloseSettings.textContent = isHira ? 'せっていをとじて はじめる ✅' : '設定を適用してはじめる ✅';
+
+    // 手元バナーバッジ
+    const lblFormulaBadge = document.getElementById('lbl-formula-badge');
+    if (lblFormulaBadge) lblFormulaBadge.textContent = isHira ? 'いまの もんだい' : '今の問題';
+    const lblNextBadge = document.getElementById('lbl-next-badge');
+    if (lblNextBadge) lblNextBadge.textContent = isHira ? 'つぎの もんだい:' : '次の問題:';
+
+    // 入力タブ
+    if (this.tabKeypad) this.tabKeypad.textContent = isHira ? '🔢 すうじ ボタン' : '🔢 すうじボタン';
+    if (this.tabHandwriting) this.tabHandwriting.textContent = isHira ? '✏️ てがき' : '✏️ てがき入力';
+
+    // 手書き認識案内
+    const lblRecogLabel = document.getElementById('lbl-recog-label');
+    if (lblRecogLabel) lblRecogLabel.textContent = isHira ? 'いまの にゅうりょく:' : 'いまの入力:';
+    const lblRecogSub = document.getElementById('lbl-recog-sub');
+    if (lblRecogSub) lblRecogSub.textContent = isHira ? '（ちがうときは したの すうじを おしてね）' : '（ちがうときは下の数字をタップしてね）';
+
+    // 結果モーダル
+    const lblScoreLabel = document.getElementById('lbl-score-label');
+    if (lblScoreLabel) lblScoreLabel.textContent = isHira ? 'せいかい' : 'せいかい';
+    const lblScoreUnit = document.getElementById('lbl-score-unit');
+    if (lblScoreUnit) lblScoreUnit.textContent = isHira ? 'もん' : 'もん';
+    const lblBdCorrect = document.getElementById('lbl-bd-correct');
+    if (lblBdCorrect) lblBdCorrect.textContent = isHira ? 'せいかい:' : 'せいかい:';
+    const lblBdIncorrect = document.getElementById('lbl-bd-incorrect');
+    if (lblBdIncorrect) lblBdIncorrect.textContent = isHira ? 'まちがい:' : 'まちがい:';
+    const lblBdUnanswered = document.getElementById('lbl-bd-unanswered');
+    if (lblBdUnanswered) lblBdUnanswered.textContent = isHira ? 'のこり:' : 'のこり:';
+    const lblBdCorrections = document.getElementById('lbl-bd-corrections');
+    if (lblBdCorrections) lblBdCorrections.textContent = isHira ? 'なおした:' : '直した:';
+
+    if (this.btnReviewAnswers) this.btnReviewAnswers.textContent = isHira ? '🔍 まちがえた もんだいを みる' : '🔍 間ちがえた問題を見る';
+    if (this.btnModalHistory) this.btnModalHistory.textContent = isHira ? '📜 これまでの きろく' : '📜 これまでのきろく';
+    if (this.btnRestart) this.btnRestart.textContent = isHira ? 'もういちど チャレンジする！ 🔄' : 'もういちど 挑戦する！ 🔄';
+
+    // 履歴モーダル
+    const histTitle = document.getElementById('history-title');
+    if (histTitle) histTitle.textContent = isHira ? 'これまでの がくしゅう きろく' : 'これまでの学習きろく';
+    const lblHistDate = document.getElementById('lbl-hist-date');
+    if (lblHistDate) lblHistDate.textContent = isHira ? '📅 いつ / ないよう' : '📅 日時 / 内容';
+    const btnClearHist = document.getElementById('btn-clear-history');
+    if (btnClearHist) btnClearHist.textContent = isHira ? '🗑️ きろくを けす' : '🗑️ きろくを消す';
+
+    if (this.isReadyToFinish) {
+      this.showFinalFinishBanner();
+    }
+  }
+
+  /**
+   * 全問回答完了時の「おわり」案内バナーを表示
+   */
+  showFinalFinishBanner() {
+    if (!this.finalFinishBox) return;
+    const isHira = (this.langMode === 'hiragana');
+    if (this.lblFinalMsg) {
+      this.lblFinalMsg.textContent = isHira
+        ? '🎉 ぜんぶ解けたよ！ みなおしができたら「おわり」を おそう'
+        : '🎉 すべて解けたよ！ 見直しができたら「おわり」を押そう';
+    }
+    if (this.btnFinalFinish) {
+      this.btnFinalFinish.textContent = '🏁 おわり';
+    }
+    if (this.nextFormulaBox) {
+      this.nextFormulaBox.style.display = 'none';
+    }
+    this.finalFinishBox.style.display = 'flex';
+  }
+
+  /**
+   * 「おわり」案内バナーを非表示
+   */
+  hideFinalFinishBanner() {
+    if (this.finalFinishBox) {
+      this.finalFinishBox.style.display = 'none';
+    }
+    if (this.nextFormulaBox && !this.isTestFinished) {
+      this.nextFormulaBox.style.display = 'flex';
     }
   }
 
@@ -215,13 +458,26 @@ class MathGridApp {
 
   /**
    * 見出し数字の生成（足し算・引き算・掛け算対応）
+   * - 'random' (一人ひとりランダム): 毎回 Math.random() で新規生成
+   * - 'shared' (クラス共通): 学校年度・計算種類・マス数・問題セット文字列の組み合わせから決定論的に生成
    * 引き算時は答えが必ず0以上になるように生成
    */
   generateHeaders() {
+    let randFunc = Math.random;
+    if (this.problemOrder === 'shared') {
+      const schoolYear = this.getSchoolYear();
+      const cleanSet = String(this.problemSet || '1018-1').trim();
+      // 学校年度 ＋ 計算種類 ＋ マス数 ＋ 問題セット番号 を合成した一意なシード文字列
+      const seedString = `SY${schoolYear}:OP${this.operation}:R${this.rows}:C${this.cols}:SET${cleanSet}`;
+      const seed = hashStringToSeed(seedString);
+      randFunc = createMulberry32Prng(seed);
+      console.log(`[問題生成] クラス共通シード: "${seedString}" -> 0x${seed.toString(16)} (${schoolYear}年度)`);
+    }
+
     const shuffle = (array) => {
       const arr = [...array];
       for (let i = arr.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+        const j = Math.floor(randFunc() * (i + 1));
         [arr[i], arr[j]] = [arr[j], arr[i]];
       }
       return arr;
@@ -1018,10 +1274,16 @@ class MathGridApp {
         this.inputFormulaText.innerHTML = `${rowNum} ${opSymbol} ${colNum} ＝ <strong class="text-success">${detail.correctAnswer}</strong> <span class="formula-wrong-note">(あなたの答え: <del>${yourAns}</del>)</span>`;
       }
       if (this.nextFormulaBox) this.nextFormulaBox.style.display = 'none';
+      if (this.finalFinishBox) this.finalFinishBox.style.display = 'none';
       return;
     }
 
-    if (this.nextFormulaBox) this.nextFormulaBox.style.display = 'flex';
+    if (this.isReadyToFinish) {
+      this.showFinalFinishBanner();
+    } else {
+      if (this.nextFormulaBox) this.nextFormulaBox.style.display = 'flex';
+      if (this.finalFinishBox) this.finalFinishBox.style.display = 'none';
+    }
 
     // 解答中: 入力済みならその数値を、未入力なら「？」を表示
     const currentVal = this.answers[row][col];
@@ -1044,7 +1306,8 @@ class MathGridApp {
       const nextColNum = this.colHeaders[nextCol];
       this.nextFormulaText.textContent = `${nextRowNum} ${opSymbol} ${nextColNum} ＝ □`;
     } else {
-      this.nextFormulaText.textContent = 'ラスト！🏁';
+      const isHira = (this.langMode === 'hiragana');
+      this.nextFormulaText.textContent = isHira ? 'さいご！🏁' : 'ラスト！🏁';
     }
   }
 
@@ -1056,7 +1319,7 @@ class MathGridApp {
   }
 
   /**
-   * 次のマスへ移動（右へ、行末なら次の行の先頭へ、最終問完了なら採点結果へ）
+   * 次のマスへ移動（右へ、行末なら次の行の先頭へ、最終問完了なら見直し・おわり状態へ）
    */
   moveToNextCell() {
     let { row, col } = this.activeCell;
@@ -1066,10 +1329,10 @@ class MathGridApp {
       row++;
     }
     if (row >= this.rows) {
-      // 最終問題の入力が完了して次のマスへ進もうとした場合：テスト終了・採点へ！
-      if (!this.isTestFinished) {
-        this.finishTest();
-      }
+      // 最終問題の入力が完了した（または末尾に到達した）：見直し・おわり状態へ！
+      this.isReadyToFinish = true;
+      this.showFinalFinishBanner();
+      this.setActiveCell(this.rows - 1, this.cols - 1);
       return;
     }
     this.setActiveCell(row, col);
@@ -1121,7 +1384,13 @@ class MathGridApp {
         }
       }
     }
-    if (this.progressCountEl) {
+    const counterContainer = document.querySelector('.status-counter');
+    if (counterContainer) {
+      const isHira = (this.langMode === 'hiragana');
+      const unitText = isHira ? 'ます' : 'マス';
+      counterContainer.innerHTML = `<span class="counter-label">のこり</span> <span class="counter-val"><strong id="progress-count">${filledCount}</strong> / ${this.totalCells} ${unitText}</span>`;
+      this.progressCountEl = document.getElementById('progress-count');
+    } else if (this.progressCountEl) {
       this.progressCountEl.textContent = filledCount;
     }
   }
@@ -1529,11 +1798,14 @@ class MathGridApp {
       return;
     }
 
+    const isHira = (this.langMode === 'hiragana');
     let bestBadge = '';
     if (comp.isBestRecord) {
+      const bestText = isHira ? 'じこベスト こうしん！' : '自己ベスト更新！';
+      const bestSub = isHira ? 'さいこう きろく たっせい！' : '最高記録達成！';
       bestBadge = `
         <div class="comp-badge-best">
-          🏆 <strong>自己ベスト更新！</strong> 最高記録達成！
+          🏆 <strong>${bestText}</strong> ${bestSub}
         </div>
       `;
     }
@@ -1542,11 +1814,14 @@ class MathGridApp {
     let timeText = '';
     if (comp.timeDiffSec !== null) {
       if (comp.timeDiffSec < 0) {
-        timeText = `<div class="comp-stat-item"><span class="comp-stat-icon">⚡</span> タイム: 前回より <strong>${Math.abs(comp.timeDiffSec)}秒 短縮！</strong></div>`;
+        const timeLbl = isHira ? `タイム: まえより <strong>${Math.abs(comp.timeDiffSec)}秒 はやくなった！</strong>` : `タイム: 前回より <strong>${Math.abs(comp.timeDiffSec)}秒 短縮！</strong>`;
+        timeText = `<div class="comp-stat-item"><span class="comp-stat-icon">⚡</span> ${timeLbl}</div>`;
       } else if (comp.timeDiffSec === 0) {
-        timeText = `<div class="comp-stat-item"><span class="comp-stat-icon">⏱️</span> タイム: 前回と同じ</div>`;
+        const timeLbl = isHira ? 'タイム: まえと おなじ' : 'タイム: 前回と同じ';
+        timeText = `<div class="comp-stat-item"><span class="comp-stat-icon">⏱️</span> ${timeLbl}</div>`;
       } else {
-        timeText = `<div class="comp-stat-item text-muted"><span class="comp-stat-icon">⏱️</span> タイム: 前回 ${comp.prevRecord.timeFormatted}（じっくり解いたね）</div>`;
+        const timeLbl = isHira ? `タイム: まえ ${comp.prevRecord.timeFormatted}（じっくり といたね）` : `タイム: 前回 ${comp.prevRecord.timeFormatted}（じっくり解いたね）`;
+        timeText = `<div class="comp-stat-item text-muted"><span class="comp-stat-icon">⏱️</span> ${timeLbl}</div>`;
       }
     }
 
@@ -1554,19 +1829,25 @@ class MathGridApp {
     let accText = '';
     if (comp.accuracyDiff !== null) {
       if (comp.accuracyDiff > 0) {
-        accText = `<div class="comp-stat-item"><span class="comp-stat-icon">📈</span> 正とう率: 前回より <strong>+${comp.accuracyDiff}% アップ！</strong></div>`;
+        const accLbl = isHira ? `正とう率: まえより <strong>+${comp.accuracyDiff}% アップ！</strong>` : `正とう率: 前回より <strong>+${comp.accuracyDiff}% アップ！</strong>`;
+        accText = `<div class="comp-stat-item"><span class="comp-stat-icon">📈</span> ${accLbl}</div>`;
       } else if (comp.accuracyDiff === 0) {
-        accText = `<div class="comp-stat-item"><span class="comp-stat-icon">🎯</span> 正とう率: 前回をキープ (${comp.prevRecord.accuracyRate}%)</div>`;
+        const accLbl = isHira ? `正とう率: まえを キープ (${comp.prevRecord.accuracyRate}%)` : `正とう率: 前回をキープ (${comp.prevRecord.accuracyRate}%)`;
+        accText = `<div class="comp-stat-item"><span class="comp-stat-icon">🎯</span> ${accLbl}</div>`;
       } else {
-        accText = `<div class="comp-stat-item text-muted"><span class="comp-stat-icon">✏️</span> 正とう率: 前回 ${comp.prevRecord.accuracyRate}%（見直してみよう！）</div>`;
+        const accLbl = isHira ? `正とう率: まえ ${comp.prevRecord.accuracyRate}%（みなおして みよう！）` : `正とう率: 前回 ${comp.prevRecord.accuracyRate}%（見直してみよう！）`;
+        accText = `<div class="comp-stat-item text-muted"><span class="comp-stat-icon">✏️</span> ${accLbl}</div>`;
       }
     }
 
     // 自己ベスト参考表示（今回がベストでない場合）
     let bestRef = '';
     if (!comp.isBestRecord && comp.bestRecord) {
-      bestRef = `<div class="comp-best-ref">👑 自己ベスト: 正とう率 <strong>${comp.bestRecord.accuracyRate}%</strong> (⏱️ ${comp.bestRecord.timeFormatted})</div>`;
+      const bestRefLbl = isHira ? `👑 じこベスト: 正とう率 <strong>${comp.bestRecord.accuracyRate}%</strong> (⏱️ ${comp.bestRecord.timeFormatted})` : `👑 自己ベスト: 正とう率 <strong>${comp.bestRecord.accuracyRate}%</strong> (⏱️ ${comp.bestRecord.timeFormatted})`;
+      bestRef = `<div class="comp-best-ref">${bestRefLbl}</div>`;
     }
+
+    const compHeader = isHira ? '📊 まえの じぶんと くらべると...' : '📊 前回の自分とくらべると...';
 
     this.resultComparisonBox.innerHTML = `
       <div class="comp-card">
@@ -1583,7 +1864,7 @@ class MathGridApp {
 
         <!-- 数値のやさしい比較 -->
         <div class="comp-details-section">
-          <div class="comp-header">📊 前回の自分とくらべると...</div>
+          <div class="comp-header">${compHeader}</div>
           <div class="comp-stats-list">
             ${accText}
             ${timeText}
@@ -1600,6 +1881,7 @@ class MathGridApp {
    */
   renderHistoryList() {
     const history = this.getHistory();
+    const isHira = (this.langMode === 'hiragana');
     const currentGridLabel = `${this.rows}×${this.cols}`;
     const currentOpLabel = this.getOperationLabel();
 
@@ -1616,20 +1898,24 @@ class MathGridApp {
     // 自己ベストカードの描画
     if (this.bestRecordStats) {
       if (best) {
+        const topAccLbl = isHira ? `${currentGridLabel} ${currentOpLabel} さいこう正とう率` : `${currentGridLabel} ${currentOpLabel} 最高正とう率`;
+        const topTimeLbl = isHira ? `${currentGridLabel} ${currentOpLabel} さいそくタイム` : `${currentGridLabel} ${currentOpLabel} 最速タイム`;
+        const unitQ = isHira ? 'もん' : '問';
         this.bestRecordStats.innerHTML = `
           <div class="best-stat-item">
-            <span class="best-stat-lbl">${currentGridLabel} ${currentOpLabel} 最高正とう率</span>
+            <span class="best-stat-lbl">${topAccLbl}</span>
             <strong class="best-stat-val text-success">${best.accuracyRate}%</strong>
-            <span class="best-stat-sub">(${best.correctCount}/${best.totalQuestions} 問)</span>
+            <span class="best-stat-sub">(${best.correctCount}/${best.totalQuestions} ${unitQ})</span>
           </div>
           <div class="best-stat-item">
-            <span class="best-stat-lbl">${currentGridLabel} ${currentOpLabel} 最速タイム</span>
+            <span class="best-stat-lbl">${topTimeLbl}</span>
             <strong class="best-stat-val text-primary">${best.timeFormatted}</strong>
             <span class="best-stat-sub">${best.date}</span>
           </div>
         `;
       } else {
-        this.bestRecordStats.innerHTML = `<span class="text-muted">まだ ${currentGridLabel} ${currentOpLabel} の記録がありません</span>`;
+        const noRecLbl = isHira ? `まだ ${currentGridLabel} ${currentOpLabel} のきろくが ありません` : `まだ ${currentGridLabel} ${currentOpLabel} の記録がありません`;
+        this.bestRecordStats.innerHTML = `<span class="text-muted">${noRecLbl}</span>`;
       }
     }
 
@@ -1666,6 +1952,27 @@ class MathGridApp {
           `;
         }).join('');
       }
+    }
+  }
+
+  /**
+   * 先生向け設定モーダルを開く
+   */
+  openSettingsModal() {
+    this.syncSettingsUI();
+    if (this.settingsModal) {
+      this.settingsModal.classList.add('is-open');
+      this.settingsModal.setAttribute('aria-hidden', 'false');
+    }
+  }
+
+  /**
+   * 先生向け設定モーダルを閉じる
+   */
+  closeSettingsModal() {
+    if (this.settingsModal) {
+      this.settingsModal.classList.remove('is-open');
+      this.settingsModal.setAttribute('aria-hidden', 'true');
     }
   }
 
@@ -1793,6 +2100,8 @@ class MathGridApp {
     }
 
     this.isTestFinished = false;
+    this.isReadyToFinish = false;
+    this.hideFinalFinishBanner();
 
     // ヘッダーのボタンをもとに戻す
     if (this.btnQuit) {
@@ -1803,7 +2112,9 @@ class MathGridApp {
     // ステータスカウンターをもとに戻す
     const counterContainer = document.querySelector('.status-counter');
     if (counterContainer) {
-      counterContainer.innerHTML = `<span class="counter-label">のこり</span> <span class="counter-val"><strong id="progress-count">0</strong> / ${this.totalCells} マス</span>`;
+      const isHira = (this.langMode === 'hiragana');
+      const unitText = isHira ? 'ます' : 'マス';
+      counterContainer.innerHTML = `<span class="counter-label">のこり</span> <span class="counter-val"><strong id="progress-count">0</strong> / ${this.totalCells} ${unitText}</span>`;
       this.progressCountEl = document.getElementById('progress-count');
     }
 
@@ -1832,6 +2143,15 @@ class MathGridApp {
     // 前へ / 次へ ボタン
     this.btnPrevCell.addEventListener('click', () => this.moveToPrevCell());
     this.btnNextCell.addEventListener('click', () => this.moveToNextCell());
+
+    // 最終問題後の「おわり」ボタン
+    if (this.btnFinalFinish) {
+      this.btnFinalFinish.addEventListener('click', () => {
+        if (!this.isTestFinished) {
+          this.finishTest();
+        }
+      });
+    }
 
     // 手書きCanvasアクションボタン
     if (this.btnClearCanvas) {
@@ -1944,6 +2264,24 @@ class MathGridApp {
       });
     }
 
+    // 先生向け設定モーダルのイベントリスナー
+    if (this.btnOpenSettings) {
+      this.btnOpenSettings.addEventListener('click', () => this.openSettingsModal());
+    }
+    if (this.btnCloseSettings) {
+      this.btnCloseSettings.addEventListener('click', () => this.closeSettingsModal());
+    }
+    if (this.btnCloseSettingsX) {
+      this.btnCloseSettingsX.addEventListener('click', () => this.closeSettingsModal());
+    }
+    if (this.settingsModal) {
+      this.settingsModal.addEventListener('click', (e) => {
+        if (e.target === this.settingsModal) {
+          this.closeSettingsModal();
+        }
+      });
+    }
+
     // きき手（右利き・左利き）切り替えボタン
     if (this.btnHandToggle) {
       this.btnHandToggle.addEventListener('click', () => this.toggleHandPreference());
@@ -1960,10 +2298,34 @@ class MathGridApp {
       });
     }
 
-    // 指導者用演算子変更（＋ たしざん / − ひきざん）
+    // 指導者用演算子変更（＋ たしざん / − ひきざん / ✖ かけざん）
     if (this.selectOperation) {
       this.selectOperation.addEventListener('change', () => {
         this.setOperation(this.selectOperation.value);
+      });
+    }
+
+    // 指導者用表示モード変更（ふつう / ひらがな）
+    if (this.selectLangMode) {
+      this.selectLangMode.addEventListener('change', () => {
+        this.setLanguageMode(this.selectLangMode.value);
+      });
+    }
+
+    // 指導者用出題順序変更（ひとりずつランダム / クラス共通）
+    if (this.selectProblemOrder) {
+      this.selectProblemOrder.addEventListener('change', () => {
+        this.setProblemOrder(this.selectProblemOrder.value);
+      });
+    }
+
+    // 指導者用問題セット番号変更（例: '1018-1', '1018-2', '1019-1'）
+    if (this.inputProblemSet) {
+      this.inputProblemSet.addEventListener('change', () => {
+        this.setProblemSet(this.inputProblemSet.value);
+      });
+      this.inputProblemSet.addEventListener('blur', () => {
+        this.setProblemSet(this.inputProblemSet.value);
       });
     }
 

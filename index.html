@@ -24,21 +24,7 @@
         </div>
       </div>
       <div class="header-right">
-        <!-- 指導者用設定コントロール（問題開始前設定） -->
-        <div class="teacher-grid-setting" title="指導者用：設定">
-          <label for="select-operation" class="teacher-label">種類:</label>
-          <select id="select-operation" class="select-grid-size select-operation" aria-label="問題種類設定">
-            <option value="+">➕ たしざん</option>
-            <option value="-">➖ ひきざん</option>
-            <option value="*">✖ かけざん</option>
-          </select>
-          <label for="select-grid-size" class="teacher-label">マス数:</label>
-          <select id="select-grid-size" class="select-grid-size" aria-label="問題マス数設定">
-            <option value="5x5">5×5 (25問)</option>
-            <option value="10x10">10×10 (100問)</option>
-          </select>
-        </div>
-
+        <button id="btn-open-settings" class="btn-icon btn-settings-header" title="先生向け設定を開く">⚙️ せってい</button>
         <button id="btn-header-history" class="btn-icon btn-history-header" title="これまでのきろく">📜 きろく</button>
         <button id="btn-hand-toggle" class="btn-hand" title="きき手を切り替える">🖐️ みぎきき</button>
         <button id="btn-sound-toggle" class="btn-icon" title="おとの切り替え">🔔</button>
@@ -87,12 +73,16 @@
           <!-- 手元フォーカス式バナー（現在の問題 ＋ 次の問題を縦配置） -->
           <div class="input-formula-banner" id="input-formula-banner" aria-live="polite">
             <div class="current-formula-box">
-              <span class="formula-badge">今の問題</span>
+              <span class="formula-badge" id="lbl-formula-badge">今の問題</span>
               <span class="formula-text" id="input-formula-text">3 ＋ 4 ＝ <span class="formula-target">？</span></span>
             </div>
             <div class="next-formula-box" id="next-formula-box">
-              <span class="next-badge">次の問題:</span>
+              <span class="next-badge" id="lbl-next-badge">次の問題:</span>
               <span class="next-text" id="next-formula-text">3 ＋ 5 ＝ □</span>
+            </div>
+            <div class="final-finish-box" id="final-finish-box" style="display: none;">
+              <span class="final-finish-msg" id="lbl-final-msg">🎉 ぜんぶ解けたよ！ 見直しができたら「おわり」を押そう</span>
+              <button id="btn-final-finish" class="btn-final-finish">🏁 おわり</button>
             </div>
           </div>
 
@@ -124,7 +114,7 @@
           <div id="handwriting-panel" class="input-panel">
             <div class="canvas-wrapper">
               <canvas id="draw-canvas" width="460" height="200" aria-label="数字の手書きエリア"></canvas>
-              <div class="canvas-watermark">ここに すうじ を かいてね</div>
+              <div class="canvas-watermark" id="canvas-watermark">ここに すうじ を かいてね</div>
               <div class="canvas-actions">
                 <button id="btn-clear-canvas" class="btn-canvas-action btn-clear" title="書き直す">🗑️ けす</button>
                 <button id="btn-confirm-next" class="btn-canvas-action btn-next" title="次のマスへ進む">つぎへ ➡️</button>
@@ -134,9 +124,9 @@
             <!-- 認識結果の確認と1タップ修正バー -->
             <div class="correction-bar-container">
               <div class="recognition-display">
-                <span class="recog-label">いまの入力:</span>
+                <span class="recog-label" id="lbl-recog-label">いまの入力:</span>
                 <span id="recog-badge" class="recog-badge">-</span>
-                <span class="recog-sub">（ちがうときは下の数字をタップしてね）</span>
+                <span class="recog-sub" id="lbl-recog-sub">（ちがうときは下の数字をタップしてね）</span>
               </div>
               <div class="quick-correction-buttons" id="quick-correction-bar">
                 <!-- 0〜9の1タップ修正ボタン -->
@@ -172,12 +162,12 @@
           <!-- 上段: 成績サマリーと内訳を横並び2カラム化 -->
           <div class="result-top-row">
             <div class="result-score-box">
-              <span class="score-label">せいかい</span>
+              <span class="score-label" id="lbl-score-label">せいかい</span>
               <div class="score-numbers">
                 <span id="result-correct-count" class="score-main">0</span>
                 <span class="score-slash">/</span>
                 <span id="result-total-count" class="score-sub">25</span>
-                <span class="score-unit">もん</span>
+                <span class="score-unit" id="lbl-score-unit">もん</span>
               </div>
               <div class="result-badges-row">
                 <span class="accuracy-tag" id="result-accuracy-tag">せいとうりつ 0%</span>
@@ -192,22 +182,22 @@
             <div class="result-breakdown">
               <div class="breakdown-item">
                 <span class="bd-icon">🎯</span>
-                <span class="bd-label">せいかい:</span>
+                <span class="bd-label" id="lbl-bd-correct">せいかい:</span>
                 <strong id="bd-correct" class="bd-val text-success">0</strong>
               </div>
               <div class="breakdown-item">
                 <span class="bd-icon">✏️</span>
-                <span class="bd-label">まちがい:</span>
+                <span class="bd-label" id="lbl-bd-incorrect">まちがい:</span>
                 <strong id="bd-incorrect" class="bd-val text-danger">0</strong>
               </div>
               <div class="breakdown-item">
                 <span class="bd-icon">⬜</span>
-                <span class="bd-label">のこり:</span>
+                <span class="bd-label" id="lbl-bd-unanswered">のこり:</span>
                 <strong id="bd-unanswered" class="bd-val text-muted">0</strong>
               </div>
               <div class="breakdown-item highlight-item">
                 <span class="bd-icon">💡</span>
-                <span class="bd-label">直した:</span>
+                <span class="bd-label" id="lbl-bd-corrections">直した:</span>
                 <strong id="bd-corrections" class="bd-val text-primary">0 かい</strong>
               </div>
             </div>
@@ -238,7 +228,7 @@
         <div class="modal-body history-body">
           <!-- 自己ベストハイライトカード -->
           <div class="best-record-card" id="best-record-card">
-            <div class="best-record-header">🏆 じこベスト</div>
+            <div class="best-record-header" id="lbl-best-header">🏆 じこベスト</div>
             <div class="best-record-stats" id="best-record-stats">
               <!-- JSで動的生成 -->
             </div>
@@ -247,9 +237,9 @@
           <!-- 履歴一覧 -->
           <div class="history-list-container">
             <div class="history-list-header">
-              <span>📅 日時 / 内容</span>
-              <span>🎯 せいとうりつ</span>
-              <span>⏱️ タイム</span>
+              <span id="lbl-hist-date">📅 日時 / 内容</span>
+              <span id="lbl-hist-acc">🎯 せいとうりつ</span>
+              <span id="lbl-hist-time">⏱️ タイム</span>
             </div>
             <div class="history-list-items" id="history-list-items">
               <!-- JSで動的生成 -->
@@ -259,6 +249,92 @@
         <div class="modal-footer modal-footer-row">
           <button id="btn-clear-history" class="btn-modal btn-clear-history" title="すべてのきろくを消去">🗑️ きろくを消す</button>
           <button id="btn-close-history" class="btn-modal btn-restart">とじる ✕</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 先生向け設定モーダル -->
+    <div id="settings-modal" class="modal-backdrop" aria-hidden="true">
+      <div class="modal-card modal-card-settings" role="dialog" aria-labelledby="settings-title">
+        <div class="modal-header">
+          <span class="modal-icon">⚙️</span>
+          <h2 id="settings-title" class="modal-title">先生向け設定</h2>
+          <button id="btn-close-settings-x" class="modal-close-btn" title="とじる">✕</button>
+        </div>
+        <div class="modal-body settings-body">
+          <p class="settings-intro" id="lbl-settings-intro">授業や学習内容に合わせて、計算の種類やマス数を設定できます。</p>
+
+          <div class="settings-grid">
+            <!-- ① 計算の種類 -->
+            <div class="setting-item-card">
+              <div class="setting-card-header">
+                <span class="setting-icon">🧮</span>
+                <span class="setting-label" id="lbl-set-op">計算の種類</span>
+              </div>
+              <select id="select-operation" class="setting-select" aria-label="問題種類設定">
+                <option value="+">➕ たしざん</option>
+                <option value="-">➖ ひきざん</option>
+                <option value="*">✖ かけざん</option>
+              </select>
+            </div>
+
+            <!-- ② マス数 -->
+            <div class="setting-item-card">
+              <div class="setting-card-header">
+                <span class="setting-icon">📐</span>
+                <span class="setting-label" id="lbl-set-grid">マス数</span>
+              </div>
+              <select id="select-grid-size" class="setting-select" aria-label="問題マス数設定">
+                <option value="5x5">5×5 (25問)</option>
+                <option value="10x10">10×10 (100問)</option>
+              </select>
+            </div>
+
+            <!-- ③ 表示モード -->
+            <div class="setting-item-card">
+              <div class="setting-card-header">
+                <span class="setting-icon">🔤</span>
+                <span class="setting-label" id="lbl-set-lang">表示</span>
+              </div>
+              <select id="select-lang-mode" class="setting-select" aria-label="表示設定">
+                <option value="kanji">ふつう（漢字あり）</option>
+                <option value="hiragana">ひらがな（低学年向け）</option>
+              </select>
+            </div>
+
+            <!-- ④ 問題の出し方 -->
+            <div class="setting-item-card">
+              <div class="setting-card-header">
+                <span class="setting-icon">🎲</span>
+                <span class="setting-label" id="lbl-set-order">問題の出し方</span>
+              </div>
+              <select id="select-problem-order" class="setting-select" aria-label="出題順設定">
+                <option value="random">一人ひとりランダム</option>
+                <option value="shared">クラス共通（全員同じ問題）</option>
+              </select>
+            </div>
+
+            <!-- ⑤ 問題セット番号（クラス共通時） -->
+            <div class="setting-item-card" id="card-problem-set">
+              <div class="setting-card-header">
+                <span class="setting-icon">🔢</span>
+                <span class="setting-label" id="lbl-set-number">問題セット</span>
+              </div>
+              <div class="setting-input-wrapper">
+                <input type="text" id="input-problem-set" class="setting-select setting-text-input" value="1018-1" placeholder="例: 1018-1" maxlength="12" aria-label="問題セット番号設定" list="preset-problem-sets">
+                <datalist id="preset-problem-sets">
+                  <option value="1018-1">10月18日 セット1</option>
+                  <option value="1018-2">10月18日 セット2</option>
+                  <option value="1019-1">10月19日 セット1</option>
+                  <option value="1">セット 1</option>
+                  <option value="2">セット 2</option>
+                </datalist>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer modal-footer-row">
+          <button id="btn-close-settings" class="btn-modal btn-restart">設定を適用してはじめる ✅</button>
         </div>
       </div>
     </div>
