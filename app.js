@@ -48,8 +48,21 @@ class MathGridApp {
 
     // 出題順序設定（'random' = 一人ひとりランダム, 'shared' = クラス共通/みんな同じ）
     this.problemOrder = localStorage.getItem('manabi_problem_order') || 'random';
-    // 問題セット番号（例: '1018-1', '1018-2', '1019-1' など MMDD-連番形式）
-    this.problemSet = localStorage.getItem('manabi_problem_set') || this.getDefaultProblemSet();
+
+    // 問題セット番号（例: '1008-1', '1008-2' など MMDD-連番形式）
+    // 日付が変わっている場合や未設定の場合は自動的に「今日の日付-1」をセット
+    const todayDateKey = this.getTodayDateKey();
+    const savedSet = localStorage.getItem('manabi_problem_set');
+    const savedDateKey = localStorage.getItem('manabi_problem_set_date');
+    if (!savedSet || savedDateKey !== todayDateKey) {
+      this.problemSet = this.getDefaultProblemSet();
+      try {
+        localStorage.setItem('manabi_problem_set', this.problemSet);
+        localStorage.setItem('manabi_problem_set_date', todayDateKey);
+      } catch (_) {}
+    } else {
+      this.problemSet = savedSet;
+    }
 
     // ストローク認識エンジン
     this.recognizer = new StrokeRecognizer();
@@ -76,11 +89,25 @@ class MathGridApp {
     this.selectLangMode = document.getElementById('select-lang-mode');
     this.selectProblemOrder = document.getElementById('select-problem-order');
     this.inputProblemSet = document.getElementById('input-problem-set') || document.getElementById('select-problem-set');
+    this.btnSetToday = document.getElementById('btn-set-today');
+    this.lblQuickSeq = document.getElementById('lbl-quick-seq');
+    this.btnSeqNext = document.getElementById('btn-seq-next');
     this.btnOpenSettings = document.getElementById('btn-open-settings');
     this.btnCloseSettings = document.getElementById('btn-close-settings');
     this.btnCloseSettingsX = document.getElementById('btn-close-settings-x');
     this.settingsModal = document.getElementById('settings-modal');
     this.langMode = localStorage.getItem('manabi_lang_mode') || 'kanji'; // 'kanji' (ふつう) / 'hiragana' (ひらがな)
+
+    // 問題の難しさ・範囲設定
+    this.diffAdd = localStorage.getItem('manabi_diff_add') || '1d_any';
+    this.diffSub = localStorage.getItem('manabi_diff_sub') || '2d_any';
+    this.diffMul = localStorage.getItem('manabi_diff_mul') || 'all';
+    this.diffGroupAdd = document.getElementById('diff-group-add');
+    this.diffGroupSub = document.getElementById('diff-group-sub');
+    this.diffGroupMul = document.getElementById('diff-group-mul');
+    this.selectDiffAdd = document.getElementById('select-diff-add');
+    this.selectDiffSub = document.getElementById('select-diff-sub');
+    this.selectDiffMul = document.getElementById('select-diff-mul');
 
     // 手元フォーカス式バナー要素（現在の問題 ＋ 次の問題を縦配置 ＋ おわり案内）
     this.inputFormulaText = document.getElementById('input-formula-text');
@@ -164,14 +191,58 @@ class MathGridApp {
   }
 
   /**
-   * デフォルトの問題セット番号（MMDD-1形式）を生成
-   * @param {Date} [date] 基準日（デフォルトは現在日時）
-   * @returns {string} 例: "1018-1"
+   * 今日のMMDD文字列を取得（例: "1008"）
+   * @param {Date} [date] 基準日
+   * @returns {string} 例: "1008"
    */
-  getDefaultProblemSet(date = new Date()) {
+  getTodayDateKey(date = new Date()) {
     const m = String(date.getMonth() + 1).padStart(2, '0');
     const d = String(date.getDate()).padStart(2, '0');
-    return `${m}${d}-1`;
+    return `${m}${d}`;
+  }
+
+  /**
+   * デフォルトの問題セット番号（MMDD-1形式）を生成
+   * @param {Date} [date] 基準日（デフォルトは現在日時）
+   * @returns {string} 例: "1008-1"
+   */
+  getDefaultProblemSet(date = new Date()) {
+    return `${this.getTodayDateKey(date)}-1`;
+  }
+
+  /**
+   * 今日の日付のセット1に設定
+   */
+  setTodayProblemSet() {
+    const todaySet = this.getDefaultProblemSet();
+    this.setProblemSet(todaySet);
+  }
+
+  /**
+   * 現在の問題セット番号の連番部分（-1, -2, -3...）を切り替える
+   * @param {number|string} seq 連番（1, 2, 3, 4など）
+   */
+  setProblemSequence(seq) {
+    const current = String(this.problemSet || '').trim();
+    const parts = current.split('-');
+    let prefix = parts[0] || this.getTodayDateKey();
+    if (!prefix) prefix = this.getTodayDateKey();
+    const newSet = `${prefix}-${seq}`;
+    this.setProblemSet(newSet);
+  }
+
+  /**
+   * 連番をインクリメント（+1）して次の問題セットへ進む
+   * （1018-4 ➔ 1018-5、1018-10 ➔ 1018-11 など上限なく増やせる）
+   */
+  incrementProblemSequence() {
+    const current = String(this.problemSet || '').trim();
+    const parts = current.split('-');
+    let prefix = parts[0] || this.getTodayDateKey();
+    let currentSeq = parseInt(parts[1] || '1', 10);
+    if (isNaN(currentSeq) || currentSeq < 1) currentSeq = 1;
+    const nextSeq = currentSeq + 1;
+    this.setProblemSet(`${prefix}-${nextSeq}`);
   }
 
   /**
@@ -238,6 +309,26 @@ class MathGridApp {
     if (this.inputProblemSet) {
       this.inputProblemSet.value = this.problemSet;
     }
+
+    // 回数ボタン（セット1〜4）のアクティブハイライト更新
+    const currentSeq = (this.problemSet.includes('-')) ? this.problemSet.split('-')[1] : this.problemSet;
+    const seqBtns = document.querySelectorAll('.btn-seq-item');
+    seqBtns.forEach(btn => {
+      const bSeq = btn.getAttribute('data-seq');
+      btn.classList.toggle('is-selected', bSeq === currentSeq);
+    });
+
+    // 難易度セレクタの表示切替（現在の演算子に応じて1つだけ表示）
+    const isSub = (this.operation === '-' || this.operation === '−');
+    const isMul = (this.operation === '*' || this.operation === '×');
+    if (this.diffGroupAdd) this.diffGroupAdd.style.display = (!isSub && !isMul) ? 'block' : 'none';
+    if (this.diffGroupSub) this.diffGroupSub.style.display = isSub ? 'block' : 'none';
+    if (this.diffGroupMul) this.diffGroupMul.style.display = isMul ? 'block' : 'none';
+
+    if (this.selectDiffAdd) this.selectDiffAdd.value = this.diffAdd;
+    if (this.selectDiffSub) this.selectDiffSub.value = this.diffSub;
+    if (this.selectDiffMul) this.selectDiffMul.value = this.diffMul;
+
     const isHira = (this.langMode === 'hiragana');
     const unitText = isHira ? 'ます' : 'マス';
     if (this.testTitleEl) {
@@ -249,6 +340,37 @@ class MathGridApp {
     if (this.testBadgeIcon) {
       this.testBadgeIcon.textContent = this.getOperationIcon();
     }
+  }
+
+  /**
+   * 現在の演算子に対応する難易度キーを取得
+   * @returns {string}
+   */
+  getCurrentDifficulty() {
+    if (this.operation === '-' || this.operation === '−') return this.diffSub;
+    if (this.operation === '*' || this.operation === '×') return this.diffMul;
+    return this.diffAdd;
+  }
+
+  /**
+   * 問題の難しさ・範囲の変更
+   * @param {string} diffVal 難易度キー
+   */
+  setDifficulty(diffVal) {
+    if (this.operation === '-' || this.operation === '−') {
+      this.diffSub = diffVal;
+      try { localStorage.setItem('manabi_diff_sub', diffVal); } catch (_) {}
+    } else if (this.operation === '*' || this.operation === '×') {
+      this.diffMul = diffVal;
+      try { localStorage.setItem('manabi_diff_mul', diffVal); } catch (_) {}
+    } else {
+      this.diffAdd = diffVal;
+      try { localStorage.setItem('manabi_diff_add', diffVal); } catch (_) {}
+    }
+
+    this.syncSettingsUI();
+    this.restartTest();
+    console.log(`[指導者設定] 難易度を [${diffVal}] に変更しました。`);
   }
 
   /**
@@ -330,6 +452,11 @@ class MathGridApp {
     if (lblSetOrder) lblSetOrder.textContent = isHira ? 'もんだいの だしかた' : '問題の出し方';
     const lblSetNumber = document.getElementById('lbl-set-number');
     if (lblSetNumber) lblSetNumber.textContent = isHira ? 'もんだいセット' : '問題セット';
+    const lblSetDiff = document.getElementById('lbl-set-diff');
+    if (lblSetDiff) lblSetDiff.textContent = isHira ? 'むずかしさ・はんい' : '難しさ・範囲';
+    if (this.btnSetToday) this.btnSetToday.textContent = isHira ? '📅 きょう' : '📅 きょう';
+    if (this.lblQuickSeq) this.lblQuickSeq.textContent = isHira ? 'かいすう:' : '回数:';
+    if (this.btnSeqNext) this.btnSeqNext.textContent = isHira ? '➕ つぎへ' : '➕ 次のセット';
     if (this.btnCloseSettings) this.btnCloseSettings.textContent = isHira ? 'せっていをとじて はじめる ✅' : '設定を適用してはじめる ✅';
 
     // 手元バナーバッジ
@@ -457,21 +584,22 @@ class MathGridApp {
   }
 
   /**
-   * 見出し数字の生成（足し算・引き算・掛け算対応）
+   * 見出し数字の生成（難しさ設定・足し算・引き算・掛け算対応）
    * - 'random' (一人ひとりランダム): 毎回 Math.random() で新規生成
-   * - 'shared' (クラス共通): 学校年度・計算種類・マス数・問題セット文字列の組み合わせから決定論的に生成
+   * - 'shared' (クラス共通): 学校年度・計算種類・難易度・マス数・問題セット文字列から決定論的に生成
    * 引き算時は答えが必ず0以上になるように生成
    */
   generateHeaders() {
     let randFunc = Math.random;
     if (this.problemOrder === 'shared') {
       const schoolYear = this.getSchoolYear();
-      const cleanSet = String(this.problemSet || '1018-1').trim();
-      // 学校年度 ＋ 計算種類 ＋ マス数 ＋ 問題セット番号 を合成した一意なシード文字列
-      const seedString = `SY${schoolYear}:OP${this.operation}:R${this.rows}:C${this.cols}:SET${cleanSet}`;
+      const cleanSet = String(this.problemSet || '1008-1').trim();
+      const currentDiff = this.getCurrentDifficulty();
+      // 学校年度 ＋ 計算種類 ＋ 難易度 ＋ マス数 ＋ 問題セット番号 を合成した一意なシード文字列
+      const seedString = `SY${schoolYear}:OP${this.operation}:DIFF${currentDiff}:R${this.rows}:C${this.cols}:SET${cleanSet}`;
       const seed = hashStringToSeed(seedString);
       randFunc = createMulberry32Prng(seed);
-      console.log(`[問題生成] クラス共通シード: "${seedString}" -> 0x${seed.toString(16)} (${schoolYear}年度)`);
+      console.log(`[問題生成] クラス共通シード: "${seedString}" -> 0x${seed.toString(16)} (${schoolYear}年度, 難易度: ${currentDiff})`);
     }
 
     const shuffle = (array) => {
@@ -487,71 +615,118 @@ class MathGridApp {
     const isMul = (this.operation === '*' || this.operation === '×');
 
     if (isSub) {
-      // 引き算: 1桁−1桁、2桁−1桁（答えは必ず0以上）
-      // 列ヘッダー（引く数）: 0〜9からシャッフル
-      const baseColDigits = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
-      let cPool = shuffle(baseColDigits);
-      while (cPool.length < this.cols) {
-        cPool = cPool.concat(shuffle(baseColDigits));
-      }
-      this.colHeaders = cPool.slice(0, this.cols);
-
-      // 引く数の最大値
-      const maxCol = Math.max(...this.colHeaders);
-
-      // 行ヘッダー（引かれる数）: 必ず maxCol 以上にして答えを0以上にする
-      if (this.rows >= 10) {
-        // 10x10の場合: 9〜18の10個の数字をシャッフル
-        const baseRowDigits = [9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
-        let rPool = shuffle(baseRowDigits);
-        while (rPool.length < this.rows) {
-          rPool = rPool.concat(shuffle(baseRowDigits));
-        }
+      // ===== ひき算の難しさ設定 =====
+      if (this.diffSub === '1d_no_borrow') {
+        // 1桁−1桁 (答え >= 0)
+        const baseCol = [0, 1, 2, 3, 4];
+        let cPool = []; while (cPool.length < this.cols) cPool = cPool.concat(shuffle(baseCol));
+        this.colHeaders = cPool.slice(0, this.cols);
+        const maxCol = Math.max(...this.colHeaders);
+        const baseRow = [5, 6, 7, 8, 9];
+        let rPool = []; while (rPool.length < this.rows) rPool = rPool.concat(shuffle(baseRow));
+        this.rowHeaders = rPool.slice(0, this.rows).map(num => Math.max(num, maxCol));
+      } else if (this.diffSub === '2d_no_borrow') {
+        // 2桁−1桁・くり下がりなし (引かれる数の一の位 >= 引く数, 答え >= 0)
+        const baseRow = [15, 16, 17, 18, 19];
+        const baseCol = [0, 1, 2, 3, 4, 5];
+        let rPool = []; while (rPool.length < this.rows) rPool = rPool.concat(shuffle(baseRow));
         this.rowHeaders = rPool.slice(0, this.rows);
+        let cPool = []; while (cPool.length < this.cols) cPool = cPool.concat(shuffle(baseCol));
+        this.colHeaders = cPool.slice(0, this.cols);
+      } else if (this.diffSub === '2d_borrow') {
+        // 2桁−1桁・くり下がりあり (引かれる数の一の位 < 引く数, 答え >= 0)
+        const baseRow = [10, 11, 12, 13, 14];
+        const baseCol = [5, 6, 7, 8, 9];
+        let rPool = []; while (rPool.length < this.rows) rPool = rPool.concat(shuffle(baseRow));
+        this.rowHeaders = rPool.slice(0, this.rows);
+        let cPool = []; while (cPool.length < this.cols) cPool = cPool.concat(shuffle(baseCol));
+        this.colHeaders = cPool.slice(0, this.cols);
       } else {
-        // 5x5等の場合: maxCol から始まる数字群（例: maxCol=7なら 7, 8, 9, 11, 14 等）
-        // 1桁−1桁と2桁−1桁が両方出現するように生成
-        const rowCandidates = [];
-        for (let offset of [0, 1, 2, 4, 7]) {
-          rowCandidates.push(maxCol + offset);
-        }
-        let rPool = shuffle(rowCandidates);
-        this.rowHeaders = rPool.slice(0, this.rows);
+        // 2d_any (2桁−1桁・指定なし: 答え >= 0)
+        const baseColDigits = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let cPool = shuffle(baseColDigits);
+        while (cPool.length < this.cols) cPool = cPool.concat(shuffle(baseColDigits));
+        this.colHeaders = cPool.slice(0, this.cols);
+        const maxCol = Math.max(...this.colHeaders);
+        const baseRowDigits = [10, 11, 12, 13, 14, 15, 16, 17, 18];
+        let rPool = []; while (rPool.length < this.rows) rPool = rPool.concat(shuffle(baseRowDigits));
+        this.rowHeaders = rPool.slice(0, this.rows).map(num => Math.max(num, maxCol));
       }
     } else if (isMul) {
-      // 掛け算: 1桁 × 1桁（九九の範囲）
-      const baseDigits = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
-
-      // 行ヘッダーの生成
-      let rPool = shuffle(baseDigits);
-      while (rPool.length < this.rows) {
-        rPool = rPool.concat(shuffle(baseDigits));
+      // ===== かけ算の難しさ設定 =====
+      if (this.diffMul === 'easy') {
+        // 2・3・4・5の段
+        const baseRow = [2, 3, 4, 5];
+        let rPool = []; while (rPool.length < this.rows) rPool = rPool.concat(shuffle(baseRow));
+        this.rowHeaders = rPool.slice(0, this.rows);
+        const baseCol = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let cPool = []; while (cPool.length < this.cols) cPool = cPool.concat(shuffle(baseCol));
+        this.colHeaders = cPool.slice(0, this.cols);
+      } else if (this.diffMul === 'hard') {
+        // 6・7・8・9の段 (後半・苦手克服)
+        const baseRow = [6, 7, 8, 9];
+        let rPool = []; while (rPool.length < this.rows) rPool = rPool.concat(shuffle(baseRow));
+        this.rowHeaders = rPool.slice(0, this.rows);
+        const baseCol = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let cPool = []; while (cPool.length < this.cols) cPool = cPool.concat(shuffle(baseCol));
+        this.colHeaders = cPool.slice(0, this.cols);
+      } else {
+        // all (九九全体)
+        const baseDigits = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let rPool = []; while (rPool.length < this.rows) rPool = rPool.concat(shuffle(baseDigits));
+        this.rowHeaders = rPool.slice(0, this.rows);
+        let cPool = []; while (cPool.length < this.cols) cPool = cPool.concat(shuffle(baseDigits));
+        this.colHeaders = cPool.slice(0, this.cols);
       }
-      this.rowHeaders = rPool.slice(0, this.rows);
-
-      // 列ヘッダーの生成
-      let cPool = shuffle(baseDigits);
-      while (cPool.length < this.cols) {
-        cPool = cPool.concat(shuffle(baseDigits));
-      }
-      this.colHeaders = cPool.slice(0, this.cols);
     } else {
-      // 足し算: 0〜9の基本数字
-      const baseDigits = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
-
-      // 行ヘッダーの生成
-      let rPool = shuffle(baseDigits);
-      while (rPool.length < this.rows) {
-        rPool = rPool.concat(shuffle(baseDigits));
+      // ===== たし算の難しさ設定 =====
+      if (this.diffAdd === '1d_no_carry') {
+        // 1桁＋1桁・くり上がりなし: 行+列 < 10
+        const baseRow = [0, 1, 2, 3, 4];
+        const baseCol = [0, 1, 2, 3, 4, 5];
+        let rPool = []; while (rPool.length < this.rows) rPool = rPool.concat(shuffle(baseRow));
+        this.rowHeaders = rPool.slice(0, this.rows);
+        let cPool = []; while (cPool.length < this.cols) cPool = cPool.concat(shuffle(baseCol));
+        this.colHeaders = cPool.slice(0, this.cols);
+      } else if (this.diffAdd === '1d_carry') {
+        // 1桁＋1桁・くり上がりあり: 行+列 >= 10
+        const baseDigits = [5, 6, 7, 8, 9];
+        let rPool = []; while (rPool.length < this.rows) rPool = rPool.concat(shuffle(baseDigits));
+        this.rowHeaders = rPool.slice(0, this.rows);
+        let cPool = []; while (cPool.length < this.cols) cPool = cPool.concat(shuffle(baseDigits));
+        this.colHeaders = cPool.slice(0, this.cols);
+      } else if (this.diffAdd === '2d_no_carry') {
+        // 2桁＋1桁・くり上がりなし: 行の一の位 + 列 < 10
+        const baseRow = [10, 11, 12, 13, 14];
+        const baseCol = [0, 1, 2, 3, 4, 5];
+        let rPool = []; while (rPool.length < this.rows) rPool = rPool.concat(shuffle(baseRow));
+        this.rowHeaders = rPool.slice(0, this.rows);
+        let cPool = []; while (cPool.length < this.cols) cPool = cPool.concat(shuffle(baseCol));
+        this.colHeaders = cPool.slice(0, this.cols);
+      } else if (this.diffAdd === '2d_carry') {
+        // 2桁＋1桁・くり上がりあり: 行の一の位 + 列 >= 10
+        const baseRow = [15, 16, 17, 18, 19];
+        const baseCol = [5, 6, 7, 8, 9];
+        let rPool = []; while (rPool.length < this.rows) rPool = rPool.concat(shuffle(baseRow));
+        this.rowHeaders = rPool.slice(0, this.rows);
+        let cPool = []; while (cPool.length < this.cols) cPool = cPool.concat(shuffle(baseCol));
+        this.colHeaders = cPool.slice(0, this.cols);
+      } else if (this.diffAdd === '2d_any') {
+        // 2桁＋1桁・指定なし
+        const baseRow = [10, 11, 12, 13, 14, 15, 16, 17, 18, 19];
+        const baseCol = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
+        let rPool = []; while (rPool.length < this.rows) rPool = rPool.concat(shuffle(baseRow));
+        this.rowHeaders = rPool.slice(0, this.rows);
+        let cPool = []; while (cPool.length < this.cols) cPool = cPool.concat(shuffle(baseCol));
+        this.colHeaders = cPool.slice(0, this.cols);
+      } else {
+        // 1d_any (1桁＋1桁・指定なし: デフォルト)
+        const baseDigits = [1, 2, 3, 4, 5, 6, 7, 8, 9, 0];
+        let rPool = []; while (rPool.length < this.rows) rPool = rPool.concat(shuffle(baseDigits));
+        this.rowHeaders = rPool.slice(0, this.rows);
+        let cPool = []; while (cPool.length < this.cols) cPool = cPool.concat(shuffle(baseDigits));
+        this.colHeaders = cPool.slice(0, this.cols);
       }
-      this.rowHeaders = rPool.slice(0, this.rows);
-
-      // 列ヘッダーの生成
-      let cPool = shuffle(baseDigits);
-      while (cPool.length < this.cols) {
-        cPool = cPool.concat(shuffle(baseDigits));
-      }
-      this.colHeaders = cPool.slice(0, this.cols);
     }
   }
 
@@ -2305,6 +2480,23 @@ class MathGridApp {
       });
     }
 
+    // 指導者用難しさ設定変更
+    if (this.selectDiffAdd) {
+      this.selectDiffAdd.addEventListener('change', () => {
+        this.setDifficulty(this.selectDiffAdd.value);
+      });
+    }
+    if (this.selectDiffSub) {
+      this.selectDiffSub.addEventListener('change', () => {
+        this.setDifficulty(this.selectDiffSub.value);
+      });
+    }
+    if (this.selectDiffMul) {
+      this.selectDiffMul.addEventListener('change', () => {
+        this.setDifficulty(this.selectDiffMul.value);
+      });
+    }
+
     // 指導者用表示モード変更（ふつう / ひらがな）
     if (this.selectLangMode) {
       this.selectLangMode.addEventListener('change', () => {
@@ -2319,13 +2511,38 @@ class MathGridApp {
       });
     }
 
-    // 指導者用問題セット番号変更（例: '1018-1', '1018-2', '1019-1'）
+    // 指導者用問題セット番号変更（例: '1008-1', '1008-2'）
     if (this.inputProblemSet) {
       this.inputProblemSet.addEventListener('change', () => {
         this.setProblemSet(this.inputProblemSet.value);
       });
       this.inputProblemSet.addEventListener('blur', () => {
         this.setProblemSet(this.inputProblemSet.value);
+      });
+    }
+
+    // 「📅 きょう」ボタン（今日の日付のセット1に即時変更）
+    if (this.btnSetToday) {
+      this.btnSetToday.addEventListener('click', () => {
+        this.setTodayProblemSet();
+      });
+    }
+
+    // 回数ボタン（セット 1〜4）
+    const seqBtns = document.querySelectorAll('.btn-seq-item');
+    seqBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const seq = btn.getAttribute('data-seq');
+        if (seq) {
+          this.setProblemSequence(seq);
+        }
+      });
+    });
+
+    // 「➕ 次のセット」ボタン（連番を無制限にインクリメント）
+    if (this.btnSeqNext) {
+      this.btnSeqNext.addEventListener('click', () => {
+        this.incrementProblemSequence();
       });
     }
 

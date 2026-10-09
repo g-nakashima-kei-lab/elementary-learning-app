@@ -278,7 +278,43 @@
               </select>
             </div>
 
-            <!-- ② マス数 -->
+            <!-- ② 問題の難しさ・範囲（計算の種類に応じて自動切替） -->
+            <div class="setting-item-card" id="card-difficulty">
+              <div class="setting-card-header">
+                <span class="setting-icon">🎯</span>
+                <span class="setting-label" id="lbl-set-diff">難しさ・範囲</span>
+              </div>
+              <!-- たし算用 -->
+              <div id="diff-group-add" class="diff-options-group">
+                <select id="select-diff-add" class="setting-select" aria-label="たし算の難しさ設定">
+                  <option value="1d_any">1桁＋1桁（指定なし）</option>
+                  <option value="1d_no_carry">1桁＋1桁（くり上がりなし）</option>
+                  <option value="1d_carry">1桁＋1桁（くり上がりあり）</option>
+                  <option value="2d_any">2桁＋1桁（指定なし）</option>
+                  <option value="2d_no_carry">2桁＋1桁（くり上がりなし）</option>
+                  <option value="2d_carry">2桁＋1桁（くり上がりあり）</option>
+                </select>
+              </div>
+              <!-- ひき算用 -->
+              <div id="diff-group-sub" class="diff-options-group" style="display: none;">
+                <select id="select-diff-sub" class="setting-select" aria-label="ひき算の難しさ設定">
+                  <option value="1d_no_borrow">1桁−1桁（答え0以上）</option>
+                  <option value="2d_any">2桁−1桁（指定なし）</option>
+                  <option value="2d_no_borrow">2桁−1桁（くり下がりなし）</option>
+                  <option value="2d_borrow">2桁−1桁（くり下がりあり）</option>
+                </select>
+              </div>
+              <!-- かけ算用 -->
+              <div id="diff-group-mul" class="diff-options-group" style="display: none;">
+                <select id="select-diff-mul" class="setting-select" aria-label="かけ算の難しさ設定">
+                  <option value="all">九九全体（1〜9の段）</option>
+                  <option value="easy">2・3・4・5の段（やさしめ）</option>
+                  <option value="hard">6・7・8・9の段（後半・苦手克服）</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- ③ マス数 -->
             <div class="setting-item-card">
               <div class="setting-card-header">
                 <span class="setting-icon">📐</span>
@@ -287,6 +323,21 @@
               <select id="select-grid-size" class="setting-select" aria-label="問題マス数設定">
                 <option value="5x5">5×5 (25問)</option>
                 <option value="10x10">10×10 (100問)</option>
+              </select>
+            </div>
+
+            <!-- ④ 制限時間 -->
+            <div class="setting-item-card" id="card-time-limit">
+              <div class="setting-card-header">
+                <span class="setting-icon">⏱️</span>
+                <span class="setting-label" id="lbl-set-time">制限時間</span>
+              </div>
+              <select id="select-time-limit" class="setting-select" aria-label="制限時間設定">
+                <option value="0">制限時間なし</option>
+                <option value="60">1分</option>
+                <option value="120">2分</option>
+                <option value="180">3分</option>
+                <option value="300">5分</option>
               </select>
             </div>
 
@@ -319,16 +370,18 @@
               <div class="setting-card-header">
                 <span class="setting-icon">🔢</span>
                 <span class="setting-label" id="lbl-set-number">問題セット</span>
+                <button type="button" id="btn-set-today" class="btn-pill-small" title="今日の日付のセット1にする">📅 きょう</button>
               </div>
               <div class="setting-input-wrapper">
-                <input type="text" id="input-problem-set" class="setting-select setting-text-input" value="1018-1" placeholder="例: 1018-1" maxlength="12" aria-label="問題セット番号設定" list="preset-problem-sets">
-                <datalist id="preset-problem-sets">
-                  <option value="1018-1">10月18日 セット1</option>
-                  <option value="1018-2">10月18日 セット2</option>
-                  <option value="1019-1">10月19日 セット1</option>
-                  <option value="1">セット 1</option>
-                  <option value="2">セット 2</option>
-                </datalist>
+                <input type="text" id="input-problem-set" class="setting-select setting-text-input" value="" placeholder="例: 1008-1" maxlength="20" aria-label="問題セット番号設定">
+              </div>
+              <div class="quick-seq-buttons">
+                <span class="quick-seq-label" id="lbl-quick-seq">回数:</span>
+                <button type="button" class="btn-seq-item" data-seq="1">セット 1</button>
+                <button type="button" class="btn-seq-item" data-seq="2">セット 2</button>
+                <button type="button" class="btn-seq-item" data-seq="3">セット 3</button>
+                <button type="button" class="btn-seq-item" data-seq="4">セット 4</button>
+                <button type="button" id="btn-seq-next" class="btn-seq-action" title="次のセット番号へ進む">➕ つぎへ</button>
               </div>
             </div>
           </div>
