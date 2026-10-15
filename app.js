@@ -109,6 +109,12 @@ class MathGridApp {
     this.selectDiffSub = document.getElementById('select-diff-sub');
     this.selectDiffMul = document.getElementById('select-diff-mul');
 
+    // 制限時間設定（0=制限時間なし, 60=1分, 120=2分, 180=3分, 300=5分）
+    this.timeLimit = parseInt(localStorage.getItem('manabi_time_limit') || '0', 10);
+    this.selectTimeLimit = document.getElementById('select-time-limit');
+    this.lblSetTime = document.getElementById('lbl-set-time');
+    this.cardTimeLimit = document.getElementById('card-time-limit');
+
     // 手元フォーカス式バナー要素（現在の問題 ＋ 次の問題を縦配置 ＋ おわり案内）
     this.inputFormulaText = document.getElementById('input-formula-text');
     this.nextFormulaText = document.getElementById('next-formula-text');
@@ -159,6 +165,7 @@ class MathGridApp {
     this.timerInterval = null;   // setInterval ID
     this.timerStartTime = null;  // performance.now() の開始時刻
     this.timerElapsedMs = 0;     // 停止時に確定した経過ミリ秒
+    this.isTimerStarted = false; // 最初の回答入力で開始するフラグ
 
     // 学習記録（localStorage）関連
     this.historyKey = 'manabi_learning_history';
@@ -286,7 +293,7 @@ class MathGridApp {
     this.setActiveCell(0, 0);
     this.attachEventListeners();
     this.updateProgress();
-    this.startTimer();
+    this.resetTimer();
     console.log(`MathGridApp initialized successfully (${this.operation}, ${this.rows}x${this.cols}, total: ${this.totalCells} cells, lang: ${this.langMode}, set: ${this.problemSet}, SY: ${this.getSchoolYear()}年度).`);
   }
 
@@ -302,6 +309,9 @@ class MathGridApp {
     }
     if (this.selectLangMode) {
       this.selectLangMode.value = this.langMode;
+    }
+    if (this.selectTimeLimit) {
+      this.selectTimeLimit.value = String(this.timeLimit);
     }
     if (this.selectProblemOrder) {
       this.selectProblemOrder.value = this.problemOrder;
@@ -340,6 +350,22 @@ class MathGridApp {
     if (this.testBadgeIcon) {
       this.testBadgeIcon.textContent = this.getOperationIcon();
     }
+  }
+
+  /**
+   * 制限時間の変更（0=制限なし, 60=1分, 120=2分, 180=3分, 300=5分）
+   * @param {number|string} seconds 秒数
+   */
+  setTimeLimit(seconds) {
+    const sec = parseInt(seconds, 10) || 0;
+    this.timeLimit = sec;
+    try {
+      localStorage.setItem('manabi_time_limit', String(sec));
+    } catch (_) {}
+
+    this.syncSettingsUI();
+    this.restartTest();
+    console.log(`[指導者設定] 制限時間を [${sec}秒] に変更しました。`);
   }
 
   /**
@@ -454,6 +480,14 @@ class MathGridApp {
     if (lblSetNumber) lblSetNumber.textContent = isHira ? 'もんだいセット' : '問題セット';
     const lblSetDiff = document.getElementById('lbl-set-diff');
     if (lblSetDiff) lblSetDiff.textContent = isHira ? 'むずかしさ・はんい' : '難しさ・範囲';
+    if (this.lblSetTime) this.lblSetTime.textContent = isHira ? 'せいげん じかん' : '制限時間';
+    if (this.selectTimeLimit && this.selectTimeLimit.options && this.selectTimeLimit.options.length >= 5) {
+      this.selectTimeLimit.options[0].text = isHira ? 'せいげんなし' : '制限時間なし';
+      this.selectTimeLimit.options[1].text = isHira ? '1ぷん' : '1分';
+      this.selectTimeLimit.options[2].text = isHira ? '2ふん' : '2分';
+      this.selectTimeLimit.options[3].text = isHira ? '3ぷん' : '3分';
+      this.selectTimeLimit.options[4].text = isHira ? '5ふん' : '5分';
+    }
     if (this.btnSetToday) this.btnSetToday.textContent = isHira ? '📅 きょう' : '📅 きょう';
     if (this.lblQuickSeq) this.lblQuickSeq.textContent = isHira ? 'かいすう:' : '回数:';
     if (this.btnSeqNext) this.btnSeqNext.textContent = isHira ? '➕ つぎへ' : '➕ 次のセット';
@@ -876,30 +910,38 @@ class MathGridApp {
   }
 
   /**
-   * タイマーを開始する（テスト開始時に呼ぶ）
+   * タイマーを開始する（最初の回答入力時に自動呼出）
    */
   startTimer() {
     if (this.timerInterval) return; // 二重起動防止
+    this.isTimerStarted = true;
     this.timerStartTime = performance.now() - this.timerElapsedMs;
-    this.timerInterval = setInterval(() => this.updateTimerDisplay(), 500);
+    this.timerInterval = setInterval(() => this.updateTimerDisplay(), 200);
     this.updateTimerDisplay(); // 即時描画
     console.log('[タイマー] 開始');
   }
 
   /**
-   * タイマーを停止する（テスト終了時に呼ぶ）
+   * タイマーを停止する（テスト終了・時間切れ時に呼ぶ）
    */
   stopTimer() {
-    if (!this.timerInterval) return;
-    clearInterval(this.timerInterval);
-    this.timerInterval = null;
-    this.timerElapsedMs = performance.now() - this.timerStartTime;
+    if (!this.timerInterval && !this.isTimerStarted) return;
+    if (this.timerInterval) {
+      clearInterval(this.timerInterval);
+      this.timerInterval = null;
+    }
+    if (this.timerStartTime) {
+      this.timerElapsedMs = performance.now() - this.timerStartTime;
+    }
+    if (this.timerDisplayEl && this.timerDisplayEl.parentElement) {
+      this.timerDisplayEl.parentElement.classList.remove('is-time-warning');
+    }
     this.updateTimerDisplay(); // 最終時刻を確定表示
     console.log(`[タイマー] 停止 (${this.formatTime(this.timerElapsedMs)})`);
   }
 
   /**
-   * タイマーをリセットする（再挑戦時に呼ぶ）
+   * タイマーをリセットする（再挑戦時・初期化時に呼ぶ）
    */
   resetTimer() {
     if (this.timerInterval) {
@@ -908,19 +950,88 @@ class MathGridApp {
     }
     this.timerStartTime = null;
     this.timerElapsedMs = 0;
+    this.isTimerStarted = false;
     if (this.timerDisplayEl) {
-      this.timerDisplayEl.textContent = '00:00';
+      if (this.timerDisplayEl.parentElement) {
+        this.timerDisplayEl.parentElement.classList.remove('is-time-warning');
+      }
+      if (this.timeLimit > 0) {
+        this.timerDisplayEl.textContent = this.formatTime(this.timeLimit * 1000);
+      } else {
+        this.timerDisplayEl.textContent = '00:00';
+      }
     }
     console.log('[タイマー] リセット');
   }
 
   /**
-   * タイマー表示を現在の経過時間で更新する
+   * タイマー表示を現在の経過時間（または残り時間）で更新する
    */
   updateTimerDisplay() {
-    if (!this.timerDisplayEl || !this.timerStartTime) return;
+    if (!this.timerDisplayEl) return;
+    if (!this.timerStartTime) {
+      if (this.timeLimit > 0) {
+        this.timerDisplayEl.textContent = this.formatTime(this.timeLimit * 1000);
+      } else {
+        this.timerDisplayEl.textContent = '00:00';
+      }
+      return;
+    }
+
     const elapsed = performance.now() - this.timerStartTime;
-    this.timerDisplayEl.textContent = this.formatTime(elapsed);
+
+    if (this.timeLimit > 0) {
+      const remainingMs = Math.max(0, (this.timeLimit * 1000) - elapsed);
+      this.timerDisplayEl.textContent = this.formatTime(remainingMs);
+
+      // 残り10秒以下で警告スタイルを付加
+      if (this.timerDisplayEl.parentElement) {
+        if (remainingMs <= 10000 && remainingMs > 0) {
+          this.timerDisplayEl.parentElement.classList.add('is-time-warning');
+        } else {
+          this.timerDisplayEl.parentElement.classList.remove('is-time-warning');
+        }
+      }
+
+      // 時間切れ判定
+      if (remainingMs <= 0 && !this.isTestFinished) {
+        this.handleTimeUp();
+      }
+    } else {
+      this.timerDisplayEl.textContent = this.formatTime(elapsed);
+    }
+  }
+
+  /**
+   * 制限時間切れ処理
+   */
+  handleTimeUp() {
+    if (this.isTestFinished) return;
+    console.log('[タイマー] 制限時間切れ！');
+
+    this.stopTimer();
+    this.timerElapsedMs = this.timeLimit * 1000; // 制限時間いっぱいで記録
+    this.isTestFinished = true;
+
+    // 保留中の自動送りや認識タイマーをキャンセル
+    if (this.recognitionTimer) {
+      clearTimeout(this.recognitionTimer);
+      this.recognitionTimer = null;
+    }
+    if (this.autoAdvanceTimer) {
+      clearTimeout(this.autoAdvanceTimer);
+      this.autoAdvanceTimer = null;
+    }
+
+    // 最終問題見直しバナーが出ていれば隠す
+    this.hideFinalFinishBanner();
+
+    // 採点と結果モーダル表示
+    const result = this.gradeTest();
+    console.log('[時間切れ 採点結果]', result);
+
+    const comparison = this.saveRecord(result);
+    this.showResultModal(result, comparison, true);
   }
 
   /**
@@ -982,6 +1093,9 @@ class MathGridApp {
 
   handlePointerDown(e) {
     if (this.isTestFinished) return;
+    if (!this.isTimerStarted) {
+      this.startTimer();
+    }
     e.preventDefault();
     if (this.autoAdvanceTimer) {
       clearTimeout(this.autoAdvanceTimer);
@@ -1010,7 +1124,7 @@ class MathGridApp {
   }
 
   handlePointerMove(e) {
-    if (!this.isDrawing) return;
+    if (this.isTestFinished || !this.isDrawing) return;
     e.preventDefault();
 
     const pt = this.getCanvasPoint(e);
@@ -1029,6 +1143,8 @@ class MathGridApp {
       this.canvas.releasePointerCapture(e.pointerId);
     } catch (_) {}
 
+    if (this.isTestFinished) return;
+
     if (this.currentStroke && this.currentStroke.points.length > 0) {
       this.currentStrokes.push(this.currentStroke);
       this.currentStroke = null;
@@ -1042,6 +1158,7 @@ class MathGridApp {
    * 自動認識のスケジュール（筆記停止の検知）
    */
   scheduleRecognition() {
+    if (this.isTestFinished) return;
     if (this.recognitionTimer) {
       clearTimeout(this.recognitionTimer);
     }
@@ -1055,7 +1172,7 @@ class MathGridApp {
    * ストローク認識の実行とマスへの反映
    */
   runRecognition() {
-    if (this.currentStrokes.length === 0) return;
+    if (this.isTestFinished || this.currentStrokes.length === 0) return;
 
     const result = this.recognizer.recognize(this.currentStrokes);
     if (!result || result.answer === '') return;
@@ -1087,6 +1204,9 @@ class MathGridApp {
    */
   applyCorrection(selectedNum) {
     if (this.isTestFinished) return;
+    if (!this.isTimerStarted) {
+      this.startTimer();
+    }
     const { row, col } = this.activeCell;
     const detail = this.details[row][col];
     const currentVal = String(this.answers[row][col] || '');
@@ -1165,6 +1285,10 @@ class MathGridApp {
     }
 
     // 0〜9の数字
+    if (!this.isTimerStarted && /^[0-9]$/.test(key)) {
+      this.startTimer();
+    }
+
     const currentVal = String(this.answers[row][col] || '');
     let newVal = key;
 
@@ -1634,9 +1758,22 @@ class MathGridApp {
    * 結果表示モーダルの表示
    * @param {Object} result 採点結果
    * @param {Object} [comparison] 過去記録との比較データ
+   * @param {boolean} [isTimeUp=false] 制限時間切れによる終了かどうか
    */
-  showResultModal(result, comparison) {
+  showResultModal(result, comparison, isTimeUp = false) {
     if (!this.resultModal) return;
+
+    const modalTitleEl = document.getElementById('modal-title');
+    const modalIconEl = this.resultModal.querySelector('.modal-icon');
+    const isHira = (this.langMode === 'hiragana');
+
+    if (isTimeUp) {
+      if (modalTitleEl) modalTitleEl.textContent = isHira ? 'じかんきれ！' : 'じかんきれ！';
+      if (modalIconEl) modalIconEl.textContent = '⏱️';
+    } else {
+      if (modalTitleEl) modalTitleEl.textContent = isHira ? 'おつかれさま！' : 'おつかれさま！';
+      if (modalIconEl) modalIconEl.textContent = '🎉';
+    }
 
     if (this.resultCorrectCount) this.resultCorrectCount.textContent = result.correctCount;
     if (this.resultTotalCount) this.resultTotalCount.textContent = result.totalQuestions;
@@ -2307,7 +2444,6 @@ class MathGridApp {
     this.setActiveCell(0, 0);
     this.updateProgress();
     this.resetTimer();
-    this.startTimer();
     console.log('[再挑戦] 新しい問題で再スタートしました。');
   }
 
@@ -2501,6 +2637,13 @@ class MathGridApp {
     if (this.selectLangMode) {
       this.selectLangMode.addEventListener('change', () => {
         this.setLanguageMode(this.selectLangMode.value);
+      });
+    }
+
+    // 指導者用制限時間設定変更
+    if (this.selectTimeLimit) {
+      this.selectTimeLimit.addEventListener('change', () => {
+        this.setTimeLimit(this.selectTimeLimit.value);
       });
     }
 
