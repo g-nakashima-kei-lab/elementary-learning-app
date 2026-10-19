@@ -478,6 +478,14 @@ body {
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
   width: 100%;
+  transition: opacity 0.2s ease;
+}
+
+.input-section.is-disabled {
+  pointer-events: none !important;
+  opacity: 0.55;
+  filter: grayscale(0.25);
+  user-select: none;
 }
 
 /* --------------------------------------------------------------------------

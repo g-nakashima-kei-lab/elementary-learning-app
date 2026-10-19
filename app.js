@@ -127,6 +127,7 @@ class MathGridApp {
     this.isReadyToFinish = false;   // 全問回答完了・見直し待機フラグ
 
     // Phase 2 入力要素キャッシュ
+    this.inputSection = document.getElementById('input-section');
     this.tabHandwriting = document.getElementById('tab-handwriting');
     this.tabKeypad = document.getElementById('tab-keypad');
     this.handwritingPanel = document.getElementById('handwriting-panel');
@@ -358,6 +359,7 @@ class MathGridApp {
    */
   setTimeLimit(seconds) {
     const sec = parseInt(seconds, 10) || 0;
+    if (this.timeLimit === sec) return;
     this.timeLimit = sec;
     try {
       localStorage.setItem('manabi_time_limit', String(sec));
@@ -936,7 +938,14 @@ class MathGridApp {
     if (this.timerDisplayEl && this.timerDisplayEl.parentElement) {
       this.timerDisplayEl.parentElement.classList.remove('is-time-warning');
     }
-    this.updateTimerDisplay(); // 最終時刻を確定表示
+    if (this.timerDisplayEl) {
+      if (this.timeLimit > 0) {
+        const remainingMs = Math.max(0, (this.timeLimit * 1000) - this.timerElapsedMs);
+        this.timerDisplayEl.textContent = this.formatCountdownTime(remainingMs);
+      } else {
+        this.timerDisplayEl.textContent = this.formatTime(this.timerElapsedMs);
+      }
+    }
     console.log(`[タイマー] 停止 (${this.formatTime(this.timerElapsedMs)})`);
   }
 
@@ -956,7 +965,7 @@ class MathGridApp {
         this.timerDisplayEl.parentElement.classList.remove('is-time-warning');
       }
       if (this.timeLimit > 0) {
-        this.timerDisplayEl.textContent = this.formatTime(this.timeLimit * 1000);
+        this.timerDisplayEl.textContent = this.formatCountdownTime(this.timeLimit * 1000);
       } else {
         this.timerDisplayEl.textContent = '00:00';
       }
@@ -971,7 +980,7 @@ class MathGridApp {
     if (!this.timerDisplayEl) return;
     if (!this.timerStartTime) {
       if (this.timeLimit > 0) {
-        this.timerDisplayEl.textContent = this.formatTime(this.timeLimit * 1000);
+        this.timerDisplayEl.textContent = this.formatCountdownTime(this.timeLimit * 1000);
       } else {
         this.timerDisplayEl.textContent = '00:00';
       }
@@ -981,8 +990,22 @@ class MathGridApp {
     const elapsed = performance.now() - this.timerStartTime;
 
     if (this.timeLimit > 0) {
-      const remainingMs = Math.max(0, (this.timeLimit * 1000) - elapsed);
-      this.timerDisplayEl.textContent = this.formatTime(remainingMs);
+      const remainingMs = (this.timeLimit * 1000) - elapsed;
+
+      // 時間切れ判定：残り時間が0以下になったら直ちに時間切れ処理
+      if (remainingMs <= 0) {
+        this.timerDisplayEl.textContent = '00:00';
+        if (this.timerDisplayEl.parentElement) {
+          this.timerDisplayEl.parentElement.classList.remove('is-time-warning');
+        }
+        if (!this.isTestFinished) {
+          this.handleTimeUp();
+        }
+        return;
+      }
+
+      // カウントダウン表示（残り0.1〜1.0秒は「00:01」、0秒以下で「00:00」）
+      this.timerDisplayEl.textContent = this.formatCountdownTime(remainingMs);
 
       // 残り10秒以下で警告スタイルを付加
       if (this.timerDisplayEl.parentElement) {
@@ -991,11 +1014,6 @@ class MathGridApp {
         } else {
           this.timerDisplayEl.parentElement.classList.remove('is-time-warning');
         }
-      }
-
-      // 時間切れ判定
-      if (remainingMs <= 0 && !this.isTestFinished) {
-        this.handleTimeUp();
       }
     } else {
       this.timerDisplayEl.textContent = this.formatTime(elapsed);
@@ -1007,11 +1025,11 @@ class MathGridApp {
    */
   handleTimeUp() {
     if (this.isTestFinished) return;
+    this.isTestFinished = true; // 多重発火・再帰呼び出しを確実に防ぐため先頭でフラグを立てる
     console.log('[タイマー] 制限時間切れ！');
 
     this.stopTimer();
     this.timerElapsedMs = this.timeLimit * 1000; // 制限時間いっぱいで記録
-    this.isTestFinished = true;
 
     // 保留中の自動送りや認識タイマーをキャンセル
     if (this.recognitionTimer) {
@@ -1023,6 +1041,15 @@ class MathGridApp {
       this.autoAdvanceTimer = null;
     }
 
+    // 描画中状態を強制キャンセル
+    this.isDrawing = false;
+    this.currentStroke = null;
+
+    // 入力エリア全体を物理的・視覚的に操作不能にする
+    if (this.inputSection) {
+      this.inputSection.classList.add('is-disabled');
+    }
+
     // 最終問題見直しバナーが出ていれば隠す
     this.hideFinalFinishBanner();
 
@@ -1032,6 +1059,20 @@ class MathGridApp {
 
     const comparison = this.saveRecord(result);
     this.showResultModal(result, comparison, true);
+  }
+
+  /**
+   * カウントダウン用の時間フォーマット（秒単位切り上げ）
+   * 残り 0.1秒〜1.0秒は「00:01」、0秒以下で「00:00」
+   * @param {number} ms
+   * @returns {string} MM:SS
+   */
+  formatCountdownTime(ms) {
+    if (ms <= 0) return '00:00';
+    const totalSec = Math.ceil(ms / 1000);
+    const m = Math.floor(totalSec / 60);
+    const s = totalSec % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   }
 
   /**
@@ -1629,8 +1670,10 @@ class MathGridApp {
     }
     if (row >= this.rows) {
       // 最終問題の入力が完了した（または末尾に到達した）：見直し・おわり状態へ！
-      this.isReadyToFinish = true;
-      this.showFinalFinishBanner();
+      if (!this.isTestFinished) {
+        this.isReadyToFinish = true;
+        this.showFinalFinishBanner();
+      }
       this.setActiveCell(this.rows - 1, this.cols - 1);
       return;
     }
@@ -1744,8 +1787,29 @@ class MathGridApp {
    * テスト終了・採点フロー
    */
   finishTest() {
-    this.stopTimer();
+    if (this.isTestFinished) return;
     this.isTestFinished = true;
+    this.stopTimer();
+
+    // 保留中の自動送りや認識タイマーをキャンセル
+    if (this.recognitionTimer) {
+      clearTimeout(this.recognitionTimer);
+      this.recognitionTimer = null;
+    }
+    if (this.autoAdvanceTimer) {
+      clearTimeout(this.autoAdvanceTimer);
+      this.autoAdvanceTimer = null;
+    }
+
+    // 描画中状態を強制キャンセル
+    this.isDrawing = false;
+    this.currentStroke = null;
+
+    // 入力エリア全体を操作不能にする
+    if (this.inputSection) {
+      this.inputSection.classList.add('is-disabled');
+    }
+
     const result = this.gradeTest();
     console.log('[Phase 3 採点完了]', result);
 
@@ -2282,6 +2346,9 @@ class MathGridApp {
    * 先生向け設定モーダルを閉じる
    */
   closeSettingsModal() {
+    if (this.selectTimeLimit) {
+      this.setTimeLimit(this.selectTimeLimit.value);
+    }
     if (this.settingsModal) {
       this.settingsModal.classList.remove('is-open');
       this.settingsModal.setAttribute('aria-hidden', 'true');
@@ -2414,6 +2481,11 @@ class MathGridApp {
     this.isTestFinished = false;
     this.isReadyToFinish = false;
     this.hideFinalFinishBanner();
+
+    // 入力エリアの操作ブロックを解除
+    if (this.inputSection) {
+      this.inputSection.classList.remove('is-disabled');
+    }
 
     // ヘッダーのボタンをもとに戻す
     if (this.btnQuit) {
@@ -2693,6 +2765,26 @@ class MathGridApp {
     window.addEventListener('keydown', (e) => {
       const { row, col } = this.activeCell;
 
+      if (this.isTestFinished) {
+        // テスト終了（時間切れ含む）後は矢印キーでの見直し移動のみ許可し、数字・消去・Enter等の解答入力を遮断
+        if (e.key === 'ArrowRight' || e.key === 'Tab') {
+          e.preventDefault();
+          this.moveToNextCell();
+        } else if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          this.moveToPrevCell();
+        } else if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          if (row < this.rows - 1) this.setActiveCell(row + 1, col);
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          if (row > 0) this.setActiveCell(row - 1, col);
+        } else if ((e.key >= '0' && e.key <= '9') || e.key === 'Backspace' || e.key === 'Delete' || e.key === 'Enter') {
+          e.preventDefault();
+        }
+        return;
+      }
+
       if (e.key === 'ArrowRight' || e.key === 'Tab') {
         e.preventDefault();
         this.moveToNextCell();
@@ -2706,10 +2798,10 @@ class MathGridApp {
         e.preventDefault();
         if (row > 0) this.setActiveCell(row - 1, col);
       } else if (e.key >= '0' && e.key <= '9') {
-        if (!this.isTestFinished) this.handleKeypadInput(e.key);
+        this.handleKeypadInput(e.key);
       } else if (e.key === 'Backspace' || e.key === 'Delete') {
         e.preventDefault();
-        if (!this.isTestFinished) this.clearCurrentCell();
+        this.clearCurrentCell();
       } else if (e.key === 'Enter') {
         e.preventDefault();
         this.moveToNextCell();
