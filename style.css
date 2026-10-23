@@ -1044,6 +1044,8 @@ body {
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.25s ease-out;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .modal-backdrop.is-open {
@@ -1064,6 +1066,7 @@ body {
   transform: scale(0.95);
   transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
   position: relative;
+  margin: auto;
 }
 
 /* 結果モーダル専用: 横幅を広げて2カラム化・縦長を完全解消 */
@@ -1783,8 +1786,26 @@ body {
 }
 
 .modal-card-settings {
-  max-width: 580px;
+  max-width: 600px;
   width: 95%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 24px;
+  box-sizing: border-box;
+}
+
+.modal-card-settings .modal-header {
+  flex-shrink: 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.modal-card-settings .modal-footer {
+  flex-shrink: 0;
+  padding-top: 12px;
+  border-top: 1px solid #e2e8f0;
+  margin-top: 4px;
 }
 
 .modal-close-btn {
@@ -1810,7 +1831,32 @@ body {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 8px 0;
+  padding: 12px 6px 12px 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  flex: 1 1 auto;
+  min-height: 0;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f1f5f9;
+}
+
+.settings-body::-webkit-scrollbar {
+  width: 8px;
+}
+
+.settings-body::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 999px;
+}
+
+.settings-body::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+
+.settings-body::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
 
 .settings-intro {
@@ -1984,8 +2030,24 @@ body {
 }
 
 @media (max-width: 600px) {
+  .modal-card-settings {
+    width: 96%;
+    padding: 16px 14px;
+    max-height: 94vh;
+  }
   .settings-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-height: 640px) {
+  .modal-card-settings {
+    max-height: 96vh;
+    padding: 12px 16px;
+  }
+  .settings-body {
+    gap: 12px;
+    padding: 8px 4px 8px 0;
   }
 }
 
