@@ -221,6 +221,8 @@ class MathGridApp {
     this.shareFeedbackMsg = document.getElementById('share-feedback-msg');
     this.inputShareUrlPreview = document.getElementById('input-share-url-preview');
     this.studentModeBadge = document.getElementById('student-mode-badge');
+    this.shareFallbackNotice = document.getElementById('share-fallback-notice');
+    this.linkShareFallback = document.getElementById('link-share-fallback');
 
     // 手元フォーカス式バナー要素（現在の問題 ＋ 次の問題を縦配置 ＋ おわり案内）
     this.inputFormulaText = document.getElementById('input-formula-text');
@@ -613,6 +615,9 @@ class MathGridApp {
       : '現在の問題（数字・配置・制限時間など）を、全員がまったく同じ条件で解ける配付用URLを発行します。<br>Google Classroomの課題や連絡帳に貼り付けて配付できます。';
     if (this.btnShareCopy) this.btnShareCopy.textContent = isHira ? '📋 くばるURLを コピーする' : '📋 配付用URLをコピーする';
     if (this.btnSharePreview) this.btnSharePreview.textContent = isHira ? '👀 じどうのがめんを ひらく' : '👀 児童用画面をひらく';
+    const fallbackText = document.querySelector('.share-fallback-text');
+    if (fallbackText) fallbackText.textContent = isHira ? '⚠️ あたらしいタブが ひらかないときは:' : '⚠️ 新しいタブが開かない場合は:';
+    if (this.linkShareFallback) this.linkShareFallback.textContent = isHira ? 'このがめんで じどうのがめんへ すすむ ➔' : 'この画面で児童用画面へ進む ➔';
     if (this.btnCloseSettings) this.btnCloseSettings.textContent = isHira ? 'せっていをとじて はじめる ✅' : '設定を適用してはじめる ✅';
 
     // 手元バナーバッジ
@@ -2898,7 +2903,30 @@ class MathGridApp {
       this.btnShareCopy.addEventListener('click', () => this.copyShareUrl());
     }
     if (this.btnSharePreview) {
-      this.btnSharePreview.addEventListener('click', () => this.previewShareUrl());
+      const updateHref = () => {
+        try {
+          const url = this.generateShareUrl();
+          this.btnSharePreview.href = url;
+          if (this.linkShareFallback) {
+            this.linkShareFallback.href = url;
+          }
+        } catch (_) {}
+      };
+      this.btnSharePreview.addEventListener('pointerenter', updateHref);
+      this.btnSharePreview.addEventListener('focus', updateHref);
+      this.btnSharePreview.addEventListener('click', () => {
+        updateHref();
+        if (this.shareFallbackNotice) {
+          this.shareFallbackNotice.style.display = 'flex';
+        }
+      });
+    }
+    if (this.linkShareFallback) {
+      this.linkShareFallback.addEventListener('click', () => {
+        try {
+          this.linkShareFallback.href = this.generateShareUrl();
+        } catch (_) {}
+      });
     }
     if (this.inputShareUrlPreview) {
       this.inputShareUrlPreview.addEventListener('click', () => {
@@ -3029,6 +3057,12 @@ class MathGridApp {
       this.inputShareUrlPreview.value = url;
       this.inputShareUrlPreview.select();
     }
+    if (this.btnSharePreview) {
+      this.btnSharePreview.href = url;
+    }
+    if (this.linkShareFallback) {
+      this.linkShareFallback.href = url;
+    }
     if (this.shareFeedbackMsg) {
       const isHira = (this.langMode === 'hiragana');
       this.shareFeedbackMsg.textContent = isHira
@@ -3043,7 +3077,24 @@ class MathGridApp {
    */
   previewShareUrl() {
     const url = this.generateShareUrl();
-    window.open(url, '_blank');
+    if (this.btnSharePreview) {
+      this.btnSharePreview.href = url;
+    }
+    if (this.linkShareFallback) {
+      this.linkShareFallback.href = url;
+    }
+    try {
+      const win = window.open(url, '_blank');
+      if (!win || win.closed || typeof win.closed === 'undefined') {
+        if (this.shareFallbackNotice) {
+          this.shareFallbackNotice.style.display = 'flex';
+        }
+      }
+    } catch (_) {
+      if (this.shareFallbackNotice) {
+        this.shareFallbackNotice.style.display = 'flex';
+      }
+    }
   }
 
   /**

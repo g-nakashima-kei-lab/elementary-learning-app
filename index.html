@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>学びのノート - 100マス計算・漢字テスト</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=20261023_fix1">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800;900&display=swap" rel="stylesheet">
@@ -400,9 +400,13 @@
                 <button type="button" id="btn-share-copy" class="btn-share-action">
                   📋 配付用URLをコピーする
                 </button>
-                <button type="button" id="btn-share-preview" class="btn-share-preview" title="児童用画面を新しいタブで確認">
+                <a id="btn-share-preview" class="btn-share-preview" href="#" target="_blank" rel="noopener noreferrer" title="児童用画面を新しいタブで確認">
                   👀 児童用画面をひらく
-                </button>
+                </a>
+              </div>
+              <div id="share-fallback-notice" class="share-fallback-notice" style="display: none;">
+                <span class="share-fallback-text">⚠️ 新しいタブが開かない場合は:</span>
+                <a id="link-share-fallback" href="#" class="btn-share-fallback-link">この画面で児童用画面へ進む ➔</a>
               </div>
               <div id="share-feedback" class="share-feedback" style="display: none;">
                 <div class="share-feedback-msg" id="share-feedback-msg">
@@ -427,7 +431,7 @@
     </footer>
   </div>
 
-  <script src="stroke-recognizer.js"></script>
-  <script src="app.js"></script>
+  <script src="stroke-recognizer.js?v=20261023"></script>
+  <script src="app.js?v=20261023_fix1"></script>
 </body>
 </html>
