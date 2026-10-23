@@ -31,38 +31,136 @@ function createMulberry32Prng(seed) {
   };
 }
 
-class MathGridApp {
-  constructor() {
-    // グリッドサイズ（設定値として行数・列数を独立管理。将来の5x10や6x8等の拡張にも対応）
-    this.rows = parseInt(localStorage.getItem('manabi_grid_rows') || '5', 10);
-    this.cols = parseInt(localStorage.getItem('manabi_grid_cols') || '5', 10);
-    this.gridSize = this.rows; // 既存コードとの互換性用
-    this.totalCells = this.rows * this.cols;
+/**
+ * 問題セットデータをURLセーフなBase64文字列にエンコードする
+ * （UTF-8対応・依存ライブラリ不要でどのブラウザでも動作）
+ * @param {Object} data 問題データオブジェクト
+ * @returns {string} URLセーフ文字列
+ */
+function encodeTaskData(data) {
+  try {
+    const jsonStr = JSON.stringify(data);
+    const utf8Bytes = new TextEncoder().encode(jsonStr);
+    let binary = '';
+    for (let i = 0; i < utf8Bytes.length; i++) {
+      binary += String.fromCharCode(utf8Bytes[i]);
+    }
+    const base64 = btoa(binary);
+    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  } catch (err) {
+    console.error('[URL配付] エンコード失敗:', err);
+    return '';
+  }
+}
 
-    this.operation = localStorage.getItem('manabi_operation') || '+';
-    this.rowHeaders = [];
-    this.colHeaders = [];
+/**
+ * URLセーフなBase64文字列から問題セットデータを復元する
+ * @param {string} token URLパラメータまたはハッシュ文字列
+ * @returns {Object|null}
+ */
+function decodeTaskData(token) {
+  try {
+    if (!token || typeof token !== 'string') return null;
+    let base64 = token.trim().replace(/-/g, '+').replace(/_/g, '/');
+    while (base64.length % 4) {
+      base64 += '=';
+    }
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    const jsonStr = new TextDecoder().decode(bytes);
+    const parsed = JSON.parse(jsonStr);
+    // 必須フィールドの検証
+    if (!parsed || !parsed.op || !Array.isArray(parsed.rh) || !Array.isArray(parsed.ch)) {
+      return null;
+    }
+    return parsed;
+  } catch (err) {
+    console.warn('[URL配付] 復元失敗:', err);
+    return null;
+  }
+}
+class MathGridApp {
+    constructor() {
+    // 児童用配付URLパラメータの確認 (?task=... または #task=...)
+    this.isStudentMode = false;
+    this.taskData = null;
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      let taskToken = urlParams.get('task') || urlParams.get('q') || urlParams.get('share');
+      if (!taskToken && window.location.hash) {
+        const hashStr = window.location.hash.replace(/^#/, '');
+        const hashParams = new URLSearchParams(hashStr);
+        taskToken = hashParams.get('task') || hashParams.get('q') || hashParams.get('share') || (hashStr.includes('=') ? null : hashStr);
+      }
+      if (taskToken) {
+        const decoded = decodeTaskData(taskToken);
+        if (decoded) {
+          this.isStudentMode = true;
+          this.taskData = decoded;
+        }
+      }
+    } catch (e) {
+      console.warn('[URL配付] パラメータ読み込み例外:', e);
+    }
+
+    if (this.isStudentMode && this.taskData) {
+      // 児童用配付モード: 配付データから問題と設定を直接復元（先生のlocalStorage設定は汚染しない）
+      this.rows = this.taskData.rows || this.taskData.rh.length;
+      this.cols = this.taskData.cols || this.taskData.ch.length;
+      this.gridSize = this.rows;
+      this.totalCells = this.rows * this.cols;
+      this.operation = this.taskData.op;
+      this.rowHeaders = [...this.taskData.rh];
+      this.colHeaders = [...this.taskData.ch];
+      this.problemOrder = 'shared';
+      this.problemSet = this.taskData.set || '配付問題';
+      this.langMode = this.taskData.lang || 'kanji';
+      this.timeLimit = typeof this.taskData.limit === 'number' ? this.taskData.limit : 0;
+      this.diffAdd = this.taskData.diff || '1d_any';
+      this.diffSub = this.taskData.diff || '2d_any';
+      this.diffMul = this.taskData.diff || 'all';
+      console.log(`[児童モード] 配付問題を正常に読み込みました (${this.problemSet}, ${this.operation}, ${this.rows}x${this.cols})`);
+    } else {
+      // 通常（先生）モード: localStorageから既存設定を読み込む
+      this.rows = parseInt(localStorage.getItem('manabi_grid_rows') || '5', 10);
+      this.cols = parseInt(localStorage.getItem('manabi_grid_cols') || '5', 10);
+      this.gridSize = this.rows; // 既存コードとの互換性用
+      this.totalCells = this.rows * this.cols;
+
+      this.operation = localStorage.getItem('manabi_operation') || '+';
+      this.rowHeaders = [];
+      this.colHeaders = [];
+
+      // 出題順序設定（'random' = 一人ひとりランダム, 'shared' = クラス共通/みんな同じ）
+      this.problemOrder = localStorage.getItem('manabi_problem_order') || 'random';
+
+      // 問題セット番号（例: '1008-1', '1008-2' など MMDD-連番形式）
+      const todayDateKey = this.getTodayDateKey();
+      const savedSet = localStorage.getItem('manabi_problem_set');
+      const savedDateKey = localStorage.getItem('manabi_problem_set_date');
+      if (!savedSet || savedDateKey !== todayDateKey) {
+        this.problemSet = this.getDefaultProblemSet();
+        try {
+          localStorage.setItem('manabi_problem_set', this.problemSet);
+          localStorage.setItem('manabi_problem_set_date', todayDateKey);
+        } catch (_) {}
+      } else {
+        this.problemSet = savedSet;
+      }
+
+      this.langMode = localStorage.getItem('manabi_lang_mode') || 'kanji';
+      this.diffAdd = localStorage.getItem('manabi_diff_add') || '1d_any';
+      this.diffSub = localStorage.getItem('manabi_diff_sub') || '2d_any';
+      this.diffMul = localStorage.getItem('manabi_diff_mul') || 'all';
+      this.timeLimit = parseInt(localStorage.getItem('manabi_time_limit') || '0', 10);
+    }
+
     this.activeCell = { row: 0, col: 0 };
     this.answers = []; // rows x cols 2D配列 (表示用)
     this.details = []; // rows x cols 2D配列 (ResultDetail構造)
-
-    // 出題順序設定（'random' = 一人ひとりランダム, 'shared' = クラス共通/みんな同じ）
-    this.problemOrder = localStorage.getItem('manabi_problem_order') || 'random';
-
-    // 問題セット番号（例: '1008-1', '1008-2' など MMDD-連番形式）
-    // 日付が変わっている場合や未設定の場合は自動的に「今日の日付-1」をセット
-    const todayDateKey = this.getTodayDateKey();
-    const savedSet = localStorage.getItem('manabi_problem_set');
-    const savedDateKey = localStorage.getItem('manabi_problem_set_date');
-    if (!savedSet || savedDateKey !== todayDateKey) {
-      this.problemSet = this.getDefaultProblemSet();
-      try {
-        localStorage.setItem('manabi_problem_set', this.problemSet);
-        localStorage.setItem('manabi_problem_set_date', todayDateKey);
-      } catch (_) {}
-    } else {
-      this.problemSet = savedSet;
-    }
 
     // ストローク認識エンジン
     this.recognizer = new StrokeRecognizer();
@@ -114,6 +212,15 @@ class MathGridApp {
     this.selectTimeLimit = document.getElementById('select-time-limit');
     this.lblSetTime = document.getElementById('lbl-set-time');
     this.cardTimeLimit = document.getElementById('card-time-limit');
+
+    // 配付UI要素キャッシュ
+    this.cardShareTask = document.getElementById('card-share-task');
+    this.btnShareCopy = document.getElementById('btn-share-copy');
+    this.btnSharePreview = document.getElementById('btn-share-preview');
+    this.shareFeedback = document.getElementById('share-feedback');
+    this.shareFeedbackMsg = document.getElementById('share-feedback-msg');
+    this.inputShareUrlPreview = document.getElementById('input-share-url-preview');
+    this.studentModeBadge = document.getElementById('student-mode-badge');
 
     // 手元フォーカス式バナー要素（現在の問題 ＋ 次の問題を縦配置 ＋ おわり案内）
     this.inputFormulaText = document.getElementById('input-formula-text');
@@ -284,6 +391,7 @@ class MathGridApp {
    * 初期化
    */
   init() {
+    if (this.isStudentMode) { this.applyStudentModeUI(); }
     this.applyLanguageMode();
     this.syncSettingsUI();
     this.generateHeaders();
@@ -447,6 +555,8 @@ class MathGridApp {
       localStorage.setItem('manabi_lang_mode', mode);
     } catch (_) {}
 
+    if (this.isStudentMode) { this.applyStudentModeUI(); }
+
     this.applyLanguageMode();
     this.syncSettingsUI();
     this.updateInputFormulaBanner(this.activeCell.row, this.activeCell.col);
@@ -493,6 +603,16 @@ class MathGridApp {
     if (this.btnSetToday) this.btnSetToday.textContent = isHira ? '📅 きょう' : '📅 きょう';
     if (this.lblQuickSeq) this.lblQuickSeq.textContent = isHira ? 'かいすう:' : '回数:';
     if (this.btnSeqNext) this.btnSeqNext.textContent = isHira ? '➕ つぎへ' : '➕ 次のセット';
+
+    // 配付カード
+    const lblShareTitle = document.getElementById('lbl-share-title');
+    if (lblShareTitle) lblShareTitle.textContent = isHira ? 'じどうへ もんだいを くばる（URLはっこう）' : '児童へ問題を配付（URL発行）';
+    const lblShareDesc = document.getElementById('lbl-share-desc');
+    if (lblShareDesc) lblShareDesc.innerHTML = isHira
+      ? 'いまの もんだい（すうじ・ならび・じかん など）を、みんなが まったく おなじ じょうけんで とける URLを はっこうします。<br>Google Classroomなどに はって くばれます。'
+      : '現在の問題（数字・配置・制限時間など）を、全員がまったく同じ条件で解ける配付用URLを発行します。<br>Google Classroomの課題や連絡帳に貼り付けて配付できます。';
+    if (this.btnShareCopy) this.btnShareCopy.textContent = isHira ? '📋 くばるURLを コピーする' : '📋 配付用URLをコピーする';
+    if (this.btnSharePreview) this.btnSharePreview.textContent = isHira ? '👀 じどうのがめんを ひらく' : '👀 児童用画面をひらく';
     if (this.btnCloseSettings) this.btnCloseSettings.textContent = isHira ? 'せっていをとじて はじめる ✅' : '設定を適用してはじめる ✅';
 
     // 手元バナーバッジ
@@ -626,6 +746,13 @@ class MathGridApp {
    * 引き算時は答えが必ず0以上になるように生成
    */
   generateHeaders() {
+    if (this.isStudentMode && this.taskData) {
+      // 児童モード: 配付された問題の行・列ヘッダーをそのまま保持（再生成しない）
+      this.rowHeaders = [...this.taskData.rh];
+      this.colHeaders = [...this.taskData.ch];
+      console.log(`[問題生成] 児童配付問題を使用します (${this.problemSet}, row: ${this.rowHeaders.join(',')}, col: ${this.colHeaders.join(',')})`);
+      return;
+    }
     let randFunc = Math.random;
     if (this.problemOrder === 'shared') {
       const schoolYear = this.getSchoolYear();
@@ -2508,8 +2635,13 @@ class MathGridApp {
       c.classList.remove('is-review-correct', 'is-review-incorrect', 'is-filled', 'is-active');
     });
 
-    // 新しいランダム問題の生成と初期化
-    this.generateHeaders();
+    // 新しい問題の初期化（児童モード時は配付された同一問題を再利用）
+    if (!this.isStudentMode) {
+      this.generateHeaders();
+    } else if (this.taskData) {
+      this.rowHeaders = [...this.taskData.rh];
+      this.colHeaders = [...this.taskData.ch];
+    }
     this.initAnswers();
     this.renderGrid();
     this.clearCurrentCell();
@@ -2761,6 +2893,19 @@ class MathGridApp {
       });
     }
 
+    // 問題セット配付（URLコピー・プレビュー・選択）
+    if (this.btnShareCopy) {
+      this.btnShareCopy.addEventListener('click', () => this.copyShareUrl());
+    }
+    if (this.btnSharePreview) {
+      this.btnSharePreview.addEventListener('click', () => this.previewShareUrl());
+    }
+    if (this.inputShareUrlPreview) {
+      this.inputShareUrlPreview.addEventListener('click', () => {
+        this.inputShareUrlPreview.select();
+      });
+    }
+
     // キーボード操作（PCテスト用 & アクセシビリティ）
     window.addEventListener('keydown', (e) => {
       const { row, col } = this.activeCell;
@@ -2818,6 +2963,108 @@ class MathGridApp {
         this.initCanvas();
       }
     });
+  }
+
+  /**
+   * 現在の問題・設定をすべて含む配付用URLを生成する
+   * （ランダム出題であっても、行・列の確定した数字群が直接URLに保存され、完全同一の問題を再現可能）
+   * @returns {string} 配付用URL
+   */
+  generateShareUrl() {
+    // ヘッダーが未生成の場合は生成
+    if (!this.rowHeaders || this.rowHeaders.length === 0 || !this.colHeaders || this.colHeaders.length === 0) {
+      this.generateHeaders();
+    }
+
+    const taskData = {
+      v: 1,
+      op: this.operation,
+      rows: this.rows,
+      cols: this.cols,
+      rh: this.rowHeaders,
+      ch: this.colHeaders,
+      limit: this.timeLimit,
+      lang: this.langMode,
+      diff: this.getCurrentDifficulty(),
+      set: this.problemSet || this.getDefaultProblemSet()
+    };
+
+    const token = encodeTaskData(taskData);
+    const baseUrl = `${window.location.origin}${window.location.pathname}`;
+    return `${baseUrl}?task=${token}`;
+  }
+
+  /**
+   * 配付用URLをクリップボードにコピーし、UIにフィードバックを表示する
+   */
+  async copyShareUrl() {
+    const url = this.generateShareUrl();
+    let copied = false;
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try {
+        await navigator.clipboard.writeText(url);
+        copied = true;
+      } catch (_) {}
+    }
+
+    if (!copied) {
+      try {
+        const textarea = document.createElement('textarea');
+        textarea.value = url;
+        textarea.style.position = 'fixed';
+        textarea.style.opacity = '0';
+        document.body.appendChild(textarea);
+        textarea.focus();
+        textarea.select();
+        copied = document.execCommand('copy');
+        document.body.removeChild(textarea);
+      } catch (_) {}
+    }
+
+    if (this.shareFeedback) {
+      this.shareFeedback.style.display = 'block';
+    }
+    if (this.inputShareUrlPreview) {
+      this.inputShareUrlPreview.value = url;
+      this.inputShareUrlPreview.select();
+    }
+    if (this.shareFeedbackMsg) {
+      const isHira = (this.langMode === 'hiragana');
+      this.shareFeedbackMsg.textContent = isHira
+        ? '✅ URLを コピーしたよ！ Google Classroomなどに はってね。'
+        : '✅ クリップボードにコピーしました！Google Classroomなどに貼り付けてください。';
+    }
+    console.log('[URL配付] 発行URL:', url);
+  }
+
+  /**
+   * 児童用画面を新しいタブでプレビュー確認
+   */
+  previewShareUrl() {
+    const url = this.generateShareUrl();
+    window.open(url, '_blank');
+  }
+
+  /**
+   * 児童用モード時の画面・UI適用
+   */
+  applyStudentModeUI() {
+    document.body.classList.add('is-student-mode');
+
+    if (this.studentModeBadge) {
+      const isHira = (this.langMode === 'hiragana');
+      this.studentModeBadge.textContent = isHira ? '🎒 はいふもんだい' : '🎒 クラス配付問題';
+      this.studentModeBadge.style.display = 'inline-flex';
+    }
+
+    // 先生用設定ボタンを安全に非表示化
+    if (this.btnOpenSettings) {
+      this.btnOpenSettings.style.display = 'none';
+      this.btnOpenSettings.setAttribute('aria-hidden', 'true');
+    }
+
+    console.log('[児童モードUI] 先生設定を非表示にし、児童配付問題モードを有効化しました。');
   }
 }
 

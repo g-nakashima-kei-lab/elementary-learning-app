@@ -21,6 +21,7 @@
         <div class="user-greeting">
           <span class="greeting-badge">3ねん1くみ</span>
           <span class="user-name">こんにちは、<strong>たろう</strong> さん</span>
+          <span id="student-mode-badge" class="student-task-badge" style="display: none;">🎒 クラス配付問題</span>
         </div>
       </div>
       <div class="header-right">
@@ -382,6 +383,34 @@
                 <button type="button" class="btn-seq-item" data-seq="3">セット 3</button>
                 <button type="button" class="btn-seq-item" data-seq="4">セット 4</button>
                 <button type="button" id="btn-seq-next" class="btn-seq-action" title="次のセット番号へ進む">➕ つぎへ</button>
+              </div>
+            </div>
+
+            <!-- ⑥ 問題セットを配付（URL発行） -->
+            <div class="setting-item-card setting-share-card" id="card-share-task">
+              <div class="setting-card-header">
+                <span class="setting-icon">📢</span>
+                <span class="setting-label" id="lbl-share-title">児童へ問題を配付（URL発行）</span>
+              </div>
+              <p class="share-card-desc" id="lbl-share-desc">
+                現在の問題（数字・配置・制限時間など）を、全員がまったく同じ条件で解ける配付用URLを発行します。<br>
+                Google Classroomの課題や連絡帳に貼り付けて配付できます。
+              </p>
+              <div class="share-actions">
+                <button type="button" id="btn-share-copy" class="btn-share-action">
+                  📋 配付用URLをコピーする
+                </button>
+                <button type="button" id="btn-share-preview" class="btn-share-preview" title="児童用画面を新しいタブで確認">
+                  👀 児童用画面をひらく
+                </button>
+              </div>
+              <div id="share-feedback" class="share-feedback" style="display: none;">
+                <div class="share-feedback-msg" id="share-feedback-msg">
+                  ✅ クリップボードにコピーしました！Google Classroomなどに貼り付けてください。
+                </div>
+                <div class="share-url-preview-box">
+                  <input type="text" id="input-share-url-preview" class="share-url-input" readonly aria-label="発行された配付用URL">
+                </div>
               </div>
             </div>
           </div>

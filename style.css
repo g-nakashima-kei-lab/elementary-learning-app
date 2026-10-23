@@ -2051,6 +2051,149 @@ body {
   }
 }
 
+/* ===== 問題セット配付（URL発行）カード ===== */
+.setting-share-card {
+  grid-column: 1 / -1; /* 全幅表示で先生が見つけやすく */
+  background: #f0fdf4;
+  border-color: #86efac;
+}
+
+.share-card-desc {
+  font-size: 0.82rem;
+  color: #334155;
+  line-height: 1.5;
+  margin: 0 0 10px 0;
+}
+
+.share-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.btn-share-action {
+  font-family: inherit;
+  font-size: 0.92rem;
+  font-weight: 850;
+  color: #ffffff;
+  background: #10b981;
+  border: none;
+  border-radius: var(--radius-md);
+  padding: 8px 16px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.25);
+  transition: all 0.15s ease-out;
+}
+
+.btn-share-action:hover {
+  background: #059669;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px rgba(16, 185, 129, 0.35);
+}
+
+.btn-share-action:active {
+  transform: translateY(0);
+}
+
+.btn-share-preview {
+  font-family: inherit;
+  font-size: 0.85rem;
+  font-weight: 800;
+  color: #475569;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: var(--radius-md);
+  padding: 7px 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s;
+}
+
+.btn-share-preview:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #1e293b;
+}
+
+.share-feedback {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: #ffffff;
+  border: 1px solid #bbf7d0;
+  border-radius: var(--radius-md);
+  animation: fadeIn 0.2s ease-out;
+}
+
+.share-feedback-msg {
+  font-size: 0.85rem;
+  font-weight: 850;
+  color: #15803d;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.share-url-preview-box {
+  display: flex;
+  gap: 6px;
+}
+
+.share-url-input {
+  width: 100%;
+  font-family: monospace, sans-serif;
+  font-size: 0.78rem;
+  padding: 6px 8px;
+  color: #334155;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+
+.share-url-input:focus {
+  border-color: #10b981;
+  background: #ffffff;
+}
+
+/* ===== 児童用配付モード (is-student-mode) ===== */
+body.is-student-mode .btn-settings-header {
+  display: none !important;
+}
+
+.student-task-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 850;
+  background: #dcfce7;
+  color: #166534;
+  border: 1px solid #86efac;
+  margin-left: 8px;
+}
+
+.student-exit-link {
+  font-size: 0.78rem;
+  color: #64748b;
+  text-decoration: underline;
+  margin-left: 12px;
+  cursor: pointer;
+}
+
+.student-exit-link:hover {
+  color: #0f172a;
+}
+
+
 
 
 
